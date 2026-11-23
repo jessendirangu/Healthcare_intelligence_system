@@ -1,16 +1,16 @@
 import re
 import sqlite3
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pycountry
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
-import diabetes_risk
+import risk_pages
 import health_education
+import intro
 from themes import THEMES, theme_css
 
 
@@ -215,7 +215,8 @@ st.set_page_config(
 )
 
 page = st.sidebar.radio(
-    "Menu", ["Patient dashboard", "Health education", "Diabetes risk (AI)"]
+    "Menu",
+    ["Patient dashboard", "Health education", "Diabetes risk (AI)", "Heart disease risk (AI)"],
 )
 
 st.sidebar.divider()
@@ -223,52 +224,58 @@ theme_name = st.sidebar.selectbox("Theme", list(THEMES), key="theme")
 theme = THEMES[theme_name]
 st.markdown(theme_css(theme), unsafe_allow_html=True)
 
+# Welcome screen, shown once per visit until the visitor clicks "Enter"
+if not st.session_state.get("entered"):
+    intro.render(theme)
+    st.stop()
+
 
 # ---------------------------------------------------------------
-# Header, clock and about box
+# Header and footer
 # ---------------------------------------------------------------
 
-st.html("""
-<div class="banner">
-    <h1>Healthcare Intelligence System</h1>
-    <p>Patient registration and disease analytics, coded with WHO ICD-11.</p>
+NAIROBI = timezone(timedelta(hours=3))
+today = datetime.now(NAIROBI).strftime("%A, %d %B %Y")
+
+st.sidebar.markdown("### 🏥 Healthcare Intelligence")
+
+st.html(f"""
+<div style="display:flex; justify-content:space-between; align-items:center;
+            flex-wrap:wrap; gap:12px; padding:18px 24px; margin-bottom:8px;
+            background:{theme['surface']}; border:1px solid {theme['border']};
+            border-top:4px solid {theme['accent']}; border-radius:12px;
+            font-family:sans-serif;">
+  <div style="display:flex; align-items:center; gap:14px;">
+    <div style="width:46px; height:46px; border-radius:10px; background:{theme['accent']};
+                display:flex; align-items:center; justify-content:center;
+                color:#fff; font-size:22px; font-weight:700;">H</div>
+    <div>
+      <div style="font-size:22px; font-weight:700; color:{theme['text']};">
+        Healthcare Intelligence System</div>
+      <div style="font-size:14px; color:{theme['muted']};">
+        Patient records, clinical analytics and health education</div>
+    </div>
+  </div>
+  <div style="font-size:13px; color:{theme['muted']}; text-align:right;">
+    {today}<br>Nairobi, Kenya
+  </div>
 </div>
 """)
 
-clock_html = """
-<div style="background:SURFACE; border:1px solid BORDER; border-radius:10px;
-            padding:16px; text-align:center; font-family:sans-serif;">
-    <div id="clock" style="color:TEXT; font-size:32px; font-weight:bold;">--:--:--</div>
-    <div id="date" style="color:ACCENT; font-size:14px; margin-top:6px;"></div>
-    <div style="color:MUTED; font-size:11px; margin-top:8px;">Nairobi (EAT)</div>
-</div>
-<script>
-function tick() {
-    const now = new Date();
-    const zone = "Africa/Nairobi";
-    document.getElementById("clock").textContent = now.toLocaleTimeString(
-        "en-GB", {timeZone: zone, hour12: false});
-    document.getElementById("date").textContent = now.toLocaleDateString(
-        "en-GB", {timeZone: zone, weekday: "long", day: "numeric",
-                  month: "long", year: "numeric"});
-}
-tick();
-setInterval(tick, 1000);
-</script>
-"""
 
-clock_col, about_col = st.columns([2, 1])
-with clock_col:
-    for key in ("surface", "border", "text", "accent", "muted"):
-        clock_html = clock_html.replace(key.upper(), theme[key])
-    components.html(clock_html, height=130)
-with about_col:
-    st.markdown("### About")
-    st.caption(
-        "Student prototype. Use fictional patients only. "
-        "Records are saved in a local database (patients.db) "
-        "and stay after you refresh or restart the app."
-    )
+def footer():
+    st.divider()
+    st.html(f"""
+    <div style="font-family:sans-serif; font-size:13px; color:{theme['muted']};
+                display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+      <div>© {datetime.now(NAIROBI).year} Jesse Kigo Ndirangu · Healthcare Intelligence System</div>
+      <div>Data: WHO ICD-11 · MedlinePlus · UCI · NIDDK</div>
+    </div>
+    <div style="font-family:sans-serif; font-size:12px; color:{theme['muted']}; margin-top:6px;">
+      For education and demonstration only. Use fictional patient data.
+      Not a substitute for professional medical advice.
+    </div>
+    """)
 
 
 # ---------------------------------------------------------------
@@ -323,11 +330,19 @@ patients = load_patients()
 if page == "Health education":
     st.divider()
     health_education.render(patients, search_who, who_definition)
+    footer()
     st.stop()
 
 if page == "Diabetes risk (AI)":
     st.divider()
-    diabetes_risk.render()
+    risk_pages.render_diabetes()
+    footer()
+    st.stop()
+
+if page == "Heart disease risk (AI)":
+    st.divider()
+    risk_pages.render_heart()
+    footer()
     st.stop()
 
 
@@ -625,5 +640,4 @@ else:
     st.info("Registration activity will show here once patients are added.")
 
 
-st.divider()
-st.caption("Healthcare Intelligence System · student prototype · fictional data only")
+footer()
