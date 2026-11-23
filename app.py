@@ -111,6 +111,20 @@ def search_who(term):
             "code": item.get("theCode", ""),
             "uri": item.get("id", ""),
         })
+
+    # Show specific diseases first. In ICD-11, codes ending in "Z" mean
+    # "unspecified" and codes ending in "Y" mean "other specified", so
+    # those general catch-all entries go to the bottom of the list.
+    def generality(match):
+        title = match["title"].lower()
+        code = match["code"].split("&")[0].split("/")[0]
+        if "unspecified" in title or code.endswith("Z"):
+            return 2
+        if "other specified" in title or code.endswith("Y"):
+            return 1
+        return 0
+
+    matches.sort(key=generality)  # stable sort keeps WHO's ranking within each group
     return matches
 
 
