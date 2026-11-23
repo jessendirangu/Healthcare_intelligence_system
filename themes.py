@@ -57,6 +57,10 @@ ul[role="listbox"] li {{ color: {t['text']} !important; }}
 .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {{
     background: {t['accent']}; color: #FFFFFF; border: none; border-radius: 8px; font-weight: 600;
 }}
+/* Keep button text white (the general text colour rule would otherwise darken it) */
+.stButton > button p, .stFormSubmitButton > button p, .stDownloadButton > button p {{
+    color: #FFFFFF !important;
+}}
 .stButton > button:hover, .stFormSubmitButton > button:hover,
 .stDownloadButton > button:hover {{ filter: brightness(1.1); color: #FFFFFF; }}
 

@@ -1,5 +1,4 @@
 import re
-import sqlite3
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -9,6 +8,8 @@ import requests
 import streamlit as st
 
 import risk_pages
+from storage import delete_my_patients, load_patients, next_patient_id, save_patient
+import auth
 import health_education
 import intro
 from themes import THEMES, theme_css
@@ -278,49 +279,19 @@ def footer():
     """)
 
 
+# Sign-in required to use the app
+if not auth.require_login():
+    footer()
+    st.stop()
+auth.sidebar_account()
+
+
 # ---------------------------------------------------------------
-# Database (SQLite - a single file, patients.db, in the project folder)
+# This user's patient records (see storage.py)
 # ---------------------------------------------------------------
 
-DB_PATH = "patients.db"
-
-
-def load_patients():
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            df = pd.read_sql("SELECT * FROM patients", conn)
-        except Exception:
-            # The table doesn't exist until the first patient is saved
-            return []
-    numeric_cols = ["Age", "Weight (kg)", "Height (cm)", "BMI", *ADULT_RANGES]
-    for col in numeric_cols:
-        if col in df:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    # Turn SQL NULLs into None so the rest of the code treats them as blank
-    df = df.astype(object).where(df.notna(), None)
-    return df.to_dict("records")
-
-
-def save_patient(record):
-    with sqlite3.connect(DB_PATH) as conn:
-        pd.DataFrame([record]).to_sql(
-            "patients", conn, if_exists="append", index=False
-        )
-
-
-def delete_all_patients():
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("DROP TABLE IF EXISTS patients")
-
-
-def next_patient_id(patients):
-    if not patients:
-        return "HIS-00001"
-    last = max(int(p["Patient ID"].split("-")[1]) for p in patients)
-    return f"HIS-{last + 1:05d}"
-
-
-patients = load_patients()
+current_email = st.session_state.user["email"]
+patients = load_patients(owner=current_email)
 
 
 # ---------------------------------------------------------------
@@ -503,7 +474,7 @@ if submitted:
     if not full_name.strip():
         st.error("Please enter the patient's full name.")
     else:
-        patient_id = next_patient_id(patients)
+        patient_id = next_patient_id()
         vitals = {
             "Temperature (°C)": temperature,
             "Pulse (bpm)": pulse,
@@ -516,6 +487,7 @@ if submitted:
         alerts = vital_alerts(vitals, age)
 
         save_patient({
+            "Owner": current_email,
             "Patient ID": patient_id,
             "Full Name": full_name.strip(),
             "Age": int(age),
@@ -568,7 +540,8 @@ st.divider()
 st.header("Patient records")
 
 if patients:
-    patient_df = pd.DataFrame(patients)
+    st.caption("Only patients you registered are shown. Other users cannot see them.")
+    patient_df = pd.DataFrame(patients).drop(columns=["Owner"], errors="ignore")
     st.dataframe(patient_df, width="stretch", hide_index=True)
     st.download_button(
         "Download records (CSV)",
@@ -577,12 +550,12 @@ if patients:
         mime="text/csv",
     )
 
-    with st.expander("Delete all test records"):
-        st.caption("Removes every patient from the database. This can't be undone.")
-        confirm = st.checkbox("Yes, I want to delete all records")
-        if st.button("Delete all records", disabled=not confirm):
-            delete_all_patients()
-            st.session_state.flash = "All records deleted."
+    with st.expander("Delete my test records"):
+        st.caption("Removes all patients that you registered. This can't be undone.")
+        confirm = st.checkbox("Yes, I want to delete my records")
+        if st.button("Delete my records", disabled=not confirm):
+            delete_my_patients(current_email)
+            st.session_state.flash = "Your records were deleted."
             st.rerun()
 else:
     st.info("No patients registered yet. Use the form above.")

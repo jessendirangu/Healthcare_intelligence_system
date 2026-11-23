@@ -1,3 +1,4 @@
 .streamlit/secrets.toml
 patients.db
 __pycache__/
+users.db
