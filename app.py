@@ -9,6 +9,9 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
+import health_education
+from themes import THEMES, theme_css
+
 
 # ---------------------------------------------------------------
 # Settings
@@ -106,8 +109,30 @@ def search_who(term):
         matches.append({
             "title": title or "Unknown condition",
             "code": item.get("theCode", ""),
+            "uri": item.get("id", ""),
         })
     return matches
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def who_definition(uri):
+    # Fetch the full ICD-11 entry for one disease and return its definition
+    if not uri:
+        return ""
+    headers = {
+        "Authorization": f"Bearer {get_who_token()}",
+        "Accept": "application/json",
+        "Accept-Language": "en",
+        "API-Version": "v2",
+    }
+    response = requests.get(
+        uri.replace("http://", "https://"), headers=headers, timeout=30
+    )
+    response.raise_for_status()
+    definition = response.json().get("definition", "")
+    if isinstance(definition, dict):
+        definition = definition.get("@value", "")
+    return definition
 
 
 def age_category(age):
@@ -174,34 +199,12 @@ st.set_page_config(
     layout="wide",
 )
 
-st.markdown("""
-<style>
-.banner {
-    padding: 28px 32px;
-    border-radius: 12px;
-    background: #FFFFFF;
-    border: 1px solid #DCE5E2;
-    border-left: 6px solid #2F7D6D;
-    margin-bottom: 20px;
-}
-.banner h1 { color: #1F3B36 !important; font-size: 32px; margin: 0 0 6px 0; }
-.banner p  { color: #5B6B68; font-size: 15px; margin: 0; }
+page = st.sidebar.radio("Menu", ["Patient dashboard", "Health education"])
 
-div[data-testid="stMetric"] {
-    background: #FFFFFF;
-    border: 1px solid #DCE5E2;
-    padding: 16px;
-    border-radius: 10px;
-}
-div[data-testid="stMetricValue"] { color: #2F7D6D !important; }
-
-div[data-testid="stForm"] {
-    background: #FFFFFF;
-    border: 1px solid #DCE5E2;
-    border-radius: 10px;
-}
-</style>
-""", unsafe_allow_html=True)
+st.sidebar.divider()
+theme_name = st.sidebar.selectbox("Theme", list(THEMES), key="theme")
+theme = THEMES[theme_name]
+st.markdown(theme_css(theme), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------
@@ -216,11 +219,11 @@ st.html("""
 """)
 
 clock_html = """
-<div style="background:#FFFFFF; border:1px solid #DCE5E2; border-radius:10px;
+<div style="background:SURFACE; border:1px solid BORDER; border-radius:10px;
             padding:16px; text-align:center; font-family:sans-serif;">
-    <div id="clock" style="color:#1F3B36; font-size:32px; font-weight:bold;">--:--:--</div>
-    <div id="date" style="color:#2F7D6D; font-size:14px; margin-top:6px;"></div>
-    <div style="color:#7A8A87; font-size:11px; margin-top:8px;">Nairobi (EAT)</div>
+    <div id="clock" style="color:TEXT; font-size:32px; font-weight:bold;">--:--:--</div>
+    <div id="date" style="color:ACCENT; font-size:14px; margin-top:6px;"></div>
+    <div style="color:MUTED; font-size:11px; margin-top:8px;">Nairobi (EAT)</div>
 </div>
 <script>
 function tick() {
@@ -239,6 +242,8 @@ setInterval(tick, 1000);
 
 clock_col, about_col = st.columns([2, 1])
 with clock_col:
+    for key in ("surface", "border", "text", "accent", "muted"):
+        clock_html = clock_html.replace(key.upper(), theme[key])
     components.html(clock_html, height=130)
 with about_col:
     st.markdown("### About")
@@ -292,6 +297,16 @@ def next_patient_id(patients):
 
 
 patients = load_patients()
+
+
+# ---------------------------------------------------------------
+# Navigation
+# ---------------------------------------------------------------
+
+if page == "Health education":
+    st.divider()
+    health_education.render(patients, search_who, who_definition)
+    st.stop()
 
 
 # ---------------------------------------------------------------
