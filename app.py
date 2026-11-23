@@ -1,0 +1,592 @@
+import re
+import sqlite3
+from collections import Counter
+from datetime import datetime
+
+import pandas as pd
+import pycountry
+import requests
+import streamlit as st
+import streamlit.components.v1 as components
+
+
+# ---------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------
+
+TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
+SEARCH_URL = "https://id.who.int/icd/release/11/2026-01/mms/search"
+
+COUNTRIES = sorted(country.name for country in pycountry.countries)
+
+# Backup list, used when the WHO API can't be reached
+# (no credentials, no internet, or no match for the search).
+LOCAL_DISEASES = {
+    "Infectious diseases": [
+        "Malaria", "Tuberculosis", "HIV disease", "Pneumonia", "Cholera",
+        "Hepatitis B", "Hepatitis C", "Influenza", "Dengue",
+        "Ebola virus disease", "Other infectious disease",
+    ],
+    "Cardiovascular diseases": [
+        "Hypertension", "Heart failure", "Coronary artery disease",
+        "Stroke", "Other cardiovascular disease",
+    ],
+    "Respiratory diseases": [
+        "Asthma", "Chronic obstructive pulmonary disease (COPD)",
+        "Bronchitis", "Other respiratory disease",
+    ],
+    "Endocrine and metabolic diseases": [
+        "Diabetes mellitus", "Obesity", "Thyroid disorder",
+        "Other endocrine or metabolic disease",
+    ],
+    "Cancers": [
+        "Breast cancer", "Cervical cancer", "Prostate cancer",
+        "Lung cancer", "Colorectal cancer", "Other cancer",
+    ],
+    "Neurological diseases": [
+        "Epilepsy", "Alzheimer disease", "Parkinson disease",
+        "Migraine", "Other neurological disease",
+    ],
+    "Mental health conditions": [
+        "Depressive disorder", "Anxiety disorder", "Bipolar disorder",
+        "Schizophrenia", "Other mental health condition",
+    ],
+    "Digestive diseases": [
+        "Gastritis", "Peptic ulcer disease", "Crohn disease",
+        "Liver disease", "Other digestive disease",
+    ],
+    "Renal diseases": [
+        "Chronic kidney disease", "Acute kidney injury", "Other renal disease",
+    ],
+    "Other / not yet classified": [
+        "Other condition", "Diagnosis not yet established",
+    ],
+}
+
+
+# ---------------------------------------------------------------
+# WHO ICD-11 API
+# ---------------------------------------------------------------
+
+@st.cache_data(ttl=3300, show_spinner=False)
+def get_who_token():
+    # WHO tokens expire after an hour, so keep one for 55 minutes.
+    response = requests.post(
+        TOKEN_URL,
+        data={"grant_type": "client_credentials", "scope": "icdapi_access"},
+        auth=(st.secrets["WHO_CLIENT_ID"], st.secrets["WHO_CLIENT_SECRET"]),
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+@st.cache_data(ttl=3600, show_spinner="Searching WHO ICD-11...")
+def search_who(term):
+    # Cached because Streamlit reruns the whole script on every click,
+    # and we don't want to call the API again each time.
+    headers = {
+        "Authorization": f"Bearer {get_who_token()}",
+        "Accept": "application/json",
+        "Accept-Language": "en",
+        "API-Version": "v2",
+    }
+    response = requests.get(
+        SEARCH_URL, headers=headers, params={"q": term}, timeout=30
+    )
+    response.raise_for_status()
+
+    matches = []
+    for item in response.json().get("destinationEntities", []):
+        title = item.get("title", "")
+        if isinstance(title, dict):
+            title = title.get("@value", "")
+        # WHO highlights the search word with <em> tags - remove them
+        title = re.sub(r"<[^>]+>", "", title).strip()
+        matches.append({
+            "title": title or "Unknown condition",
+            "code": item.get("theCode", ""),
+        })
+    return matches
+
+
+def age_category(age):
+    if age < 18:
+        return "Children/Adolescents"
+    if age < 60:
+        return "Adults"
+    return "Older Adults"
+
+
+def calculate_bmi(weight_kg, height_cm):
+    if not weight_kg or not height_cm:
+        return None
+    height_m = height_cm / 100
+    return round(weight_kg / height_m ** 2, 1)
+
+
+def bmi_class(bmi):
+    if bmi is None:
+        return ""
+    if bmi < 18.5:
+        return "Underweight"
+    if bmi < 25:
+        return "Normal"
+    if bmi < 30:
+        return "Overweight"
+    return "Obese"
+
+
+# Adult reference ranges: (low, high). A reading outside the range is flagged.
+# Children have different normal ranges, so they are not flagged here.
+ADULT_RANGES = {
+    "Temperature (°C)": (36.0, 37.5),
+    "Pulse (bpm)": (60, 100),
+    "Respiratory rate (/min)": (12, 20),
+    "Systolic BP (mmHg)": (90, 139),
+    "Diastolic BP (mmHg)": (60, 89),
+    "SpO2 (%)": (94, 100),
+}
+
+
+def vital_alerts(vitals, age):
+    if age < 18:
+        return []
+    alerts = []
+    for name, value in vitals.items():
+        if value is None:
+            continue
+        low, high = ADULT_RANGES[name]
+        if value < low:
+            alerts.append(f"Low {name.split(' (')[0]} ({value})")
+        elif value > high:
+            alerts.append(f"High {name.split(' (')[0]} ({value})")
+    return alerts
+
+
+# ---------------------------------------------------------------
+# Page setup and styling
+# ---------------------------------------------------------------
+
+st.set_page_config(
+    page_title="Healthcare Intelligence System",
+    page_icon="🏥",
+    layout="wide",
+)
+
+st.markdown("""
+<style>
+.banner {
+    padding: 28px 32px;
+    border-radius: 12px;
+    background: #FFFFFF;
+    border: 1px solid #DCE5E2;
+    border-left: 6px solid #2F7D6D;
+    margin-bottom: 20px;
+}
+.banner h1 { color: #1F3B36 !important; font-size: 32px; margin: 0 0 6px 0; }
+.banner p  { color: #5B6B68; font-size: 15px; margin: 0; }
+
+div[data-testid="stMetric"] {
+    background: #FFFFFF;
+    border: 1px solid #DCE5E2;
+    padding: 16px;
+    border-radius: 10px;
+}
+div[data-testid="stMetricValue"] { color: #2F7D6D !important; }
+
+div[data-testid="stForm"] {
+    background: #FFFFFF;
+    border: 1px solid #DCE5E2;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------
+# Header, clock and about box
+# ---------------------------------------------------------------
+
+st.html("""
+<div class="banner">
+    <h1>Healthcare Intelligence System</h1>
+    <p>Patient registration and disease analytics, coded with WHO ICD-11.</p>
+</div>
+""")
+
+clock_html = """
+<div style="background:#FFFFFF; border:1px solid #DCE5E2; border-radius:10px;
+            padding:16px; text-align:center; font-family:sans-serif;">
+    <div id="clock" style="color:#1F3B36; font-size:32px; font-weight:bold;">--:--:--</div>
+    <div id="date" style="color:#2F7D6D; font-size:14px; margin-top:6px;"></div>
+    <div style="color:#7A8A87; font-size:11px; margin-top:8px;">Nairobi (EAT)</div>
+</div>
+<script>
+function tick() {
+    const now = new Date();
+    const zone = "Africa/Nairobi";
+    document.getElementById("clock").textContent = now.toLocaleTimeString(
+        "en-GB", {timeZone: zone, hour12: false});
+    document.getElementById("date").textContent = now.toLocaleDateString(
+        "en-GB", {timeZone: zone, weekday: "long", day: "numeric",
+                  month: "long", year: "numeric"});
+}
+tick();
+setInterval(tick, 1000);
+</script>
+"""
+
+clock_col, about_col = st.columns([2, 1])
+with clock_col:
+    components.html(clock_html, height=130)
+with about_col:
+    st.markdown("### About")
+    st.caption(
+        "Student prototype. Use fictional patients only. "
+        "Records are saved in a local database (patients.db) "
+        "and stay after you refresh or restart the app."
+    )
+
+
+# ---------------------------------------------------------------
+# Database (SQLite - a single file, patients.db, in the project folder)
+# ---------------------------------------------------------------
+
+DB_PATH = "patients.db"
+
+
+def load_patients():
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM patients", conn)
+        except Exception:
+            # The table doesn't exist until the first patient is saved
+            return []
+    numeric_cols = ["Age", "Weight (kg)", "Height (cm)", "BMI", *ADULT_RANGES]
+    for col in numeric_cols:
+        if col in df:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Turn SQL NULLs into None so the rest of the code treats them as blank
+    df = df.astype(object).where(df.notna(), None)
+    return df.to_dict("records")
+
+
+def save_patient(record):
+    with sqlite3.connect(DB_PATH) as conn:
+        pd.DataFrame([record]).to_sql(
+            "patients", conn, if_exists="append", index=False
+        )
+
+
+def delete_all_patients():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DROP TABLE IF EXISTS patients")
+
+
+def next_patient_id(patients):
+    if not patients:
+        return "HIS-00001"
+    last = max(int(p["Patient ID"].split("-")[1]) for p in patients)
+    return f"HIS-{last + 1:05d}"
+
+
+patients = load_patients()
+
+
+# ---------------------------------------------------------------
+# Overview
+# ---------------------------------------------------------------
+
+st.divider()
+st.header("Clinical overview")
+
+category_counts = Counter(p["Category"] for p in patients)
+children = category_counts["Children/Adolescents"]
+adults = category_counts["Adults"]
+older_adults = category_counts["Older Adults"]
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total patients", len(patients))
+c2.metric("Children / adolescents", children)
+c3.metric("Adults (18-59)", adults)
+c4.metric("Older adults (60+)", older_adults)
+
+st.divider()
+st.header("Patient population")
+
+left, right = st.columns(2)
+with left:
+    st.subheader("By age group")
+    age_df = pd.DataFrame({
+        "Age group": ["Children", "Adults", "Older adults"],
+        "Patients": [children, adults, older_adults],
+    })
+    st.bar_chart(age_df.set_index("Age group"), color="#2F7D6D")
+
+with right:
+    st.subheader("By gender")
+    if patients:
+        gender_df = pd.DataFrame(
+            Counter(p["Gender"] for p in patients).items(),
+            columns=["Gender", "Patients"],
+        )
+        st.bar_chart(gender_df.set_index("Gender"), color="#6B8FA3")
+    else:
+        st.info("Register patients to see the gender breakdown.")
+
+
+# ---------------------------------------------------------------
+# Patient registration
+# ---------------------------------------------------------------
+
+st.divider()
+st.header("Register a patient")
+
+# Diagnosis lookup sits outside the form so the results
+# update as soon as you type a search term.
+st.markdown("#### Diagnosis (WHO ICD-11)")
+
+disease, disease_code = "", ""
+use_local_list = False
+
+search_term = st.text_input(
+    "Search disease or diagnosis",
+    placeholder="e.g. diabetes, malaria, tuberculosis",
+).strip()
+
+if len(search_term) >= 2:
+    try:
+        matches = search_who(search_term)
+    except Exception:
+        st.warning(
+            "Couldn't reach the WHO ICD-11 service. "
+            "Pick the diagnosis from the local list instead."
+        )
+        use_local_list = True
+    else:
+        if matches:
+            choice = st.selectbox(
+                "Select the matching diagnosis",
+                range(len(matches)),
+                format_func=lambda i: (
+                    f"{matches[i]['title']} "
+                    f"(ICD-11: {matches[i]['code'] or 'no code'})"
+                ),
+            )
+            disease = matches[choice]["title"]
+            disease_code = matches[choice]["code"]
+        else:
+            st.info("No WHO match. Try another term, or use the local list below.")
+            use_local_list = True
+
+if use_local_list:
+    group = st.selectbox("Disease group", list(LOCAL_DISEASES))
+    disease = st.selectbox("Diagnosis", LOCAL_DISEASES[group])
+
+with st.form("patient_form", clear_on_submit=True):
+    full_name = st.text_input("Full name")
+
+    col1, col2, col3 = st.columns(3)
+    age = col1.number_input("Age", min_value=0, max_value=120, value=25)
+    gender = col2.selectbox(
+        "Gender", ["Female", "Male", "Other", "Prefer not to say"]
+    )
+    diagnosis_status = col3.selectbox(
+        "Diagnosis status",
+        ["Confirmed", "Suspected", "Under investigation", "Historical"],
+    )
+
+    st.markdown("#### Vital signs")
+    st.caption("Leave blank if not taken. Abnormal readings are flagged for adults (18+).")
+    v1, v2, v3, v4 = st.columns(4)
+    temperature = v1.number_input(
+        "Temperature (°C)", 30.0, 45.0, value=None, step=0.1, format="%.1f"
+    )
+    pulse = v2.number_input("Pulse (bpm)", 20, 250, value=None)
+    resp_rate = v3.number_input("Respiratory rate (/min)", 4, 80, value=None)
+    spo2 = v4.number_input("SpO2 (%)", 50, 100, value=None)
+
+    v5, v6, v7, v8 = st.columns(4)
+    systolic = v5.number_input("Systolic BP (mmHg)", 50, 260, value=None)
+    diastolic = v6.number_input("Diastolic BP (mmHg)", 30, 160, value=None)
+    weight = v7.number_input("Weight (kg)", 1.0, 300.0, value=None, step=0.5)
+    height = v8.number_input("Height (cm)", 40.0, 230.0, value=None, step=0.5)
+
+    st.markdown("#### Location and nationality")
+    col4, col5 = st.columns(2)
+    with col4:
+        country_residence = st.selectbox(
+            "Country of residence", COUNTRIES, index=COUNTRIES.index("Kenya")
+        )
+        city_residence = st.text_input("City of residence", placeholder="e.g. Nairobi")
+        country_birth = st.selectbox(
+            "Country of birth", COUNTRIES, index=COUNTRIES.index("Kenya")
+        )
+    with col5:
+        city_birth = st.text_input("City of birth", placeholder="e.g. Kisumu")
+        nationality = st.text_input("Nationality", placeholder="e.g. Kenyan")
+
+    st.markdown("#### Optional (self-reported)")
+    col6, col7 = st.columns(2)
+    race = col6.selectbox(
+        "Race",
+        [
+            "Prefer not to say", "Black or African American", "White",
+            "Asian", "American Indian or Alaska Native",
+            "Native Hawaiian or Other Pacific Islander", "Mixed race", "Other",
+        ],
+    )
+    religion = col7.selectbox(
+        "Religion",
+        [
+            "Prefer not to say", "Christian", "Muslim", "Hindu", "Buddhist",
+            "Traditional / Indigenous beliefs", "Other",
+        ],
+    )
+
+    submitted = st.form_submit_button("Register patient", use_container_width=True)
+
+if submitted:
+    if not full_name.strip():
+        st.error("Please enter the patient's full name.")
+    else:
+        patient_id = next_patient_id(patients)
+        vitals = {
+            "Temperature (°C)": temperature,
+            "Pulse (bpm)": pulse,
+            "Respiratory rate (/min)": resp_rate,
+            "Systolic BP (mmHg)": systolic,
+            "Diastolic BP (mmHg)": diastolic,
+            "SpO2 (%)": spo2,
+        }
+        bmi = calculate_bmi(weight, height)
+        alerts = vital_alerts(vitals, age)
+
+        save_patient({
+            "Patient ID": patient_id,
+            "Full Name": full_name.strip(),
+            "Age": int(age),
+            "Gender": gender,
+            "Category": age_category(age),
+            "Disease / Diagnosis": disease,
+            "ICD-11 Code": disease_code,
+            "Diagnosis Status": diagnosis_status,
+            **vitals,
+            "Weight (kg)": weight,
+            "Height (cm)": height,
+            "BMI": bmi,
+            "BMI Class": bmi_class(bmi),
+            "Alerts": "; ".join(alerts),
+            "Country of Residence": country_residence,
+            "City of Residence": city_residence.strip(),
+            "Country of Birth": country_birth,
+            "City of Birth": city_birth.strip(),
+            "Nationality": nationality.strip(),
+            "Race": race,
+            "Religion": religion,
+            "Registered At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        # st.rerun() wipes anything shown on this run, so save the
+        # message and show it after the page reloads.
+        st.session_state.flash = f"Patient {patient_id} registered."
+        st.rerun()
+
+if "flash" in st.session_state:
+    st.success(st.session_state.pop("flash"))
+
+
+# ---------------------------------------------------------------
+# Patient records
+# ---------------------------------------------------------------
+
+st.divider()
+st.header("Vital sign alerts")
+
+flagged = [p for p in patients if p.get("Alerts")]
+if flagged:
+    for p in flagged:
+        st.warning(f"**{p['Patient ID']} · {p['Full Name']}**: {p['Alerts']}")
+elif patients:
+    st.success("No abnormal vital signs recorded.")
+else:
+    st.info("Alerts will appear here when a patient has abnormal vitals.")
+
+st.divider()
+st.header("Patient records")
+
+if patients:
+    patient_df = pd.DataFrame(patients)
+    st.dataframe(patient_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        "Download records (CSV)",
+        patient_df.to_csv(index=False).encode("utf-8"),
+        file_name="patients.csv",
+        mime="text/csv",
+    )
+
+    with st.expander("Delete all test records"):
+        st.caption("Removes every patient from the database. This can't be undone.")
+        confirm = st.checkbox("Yes, I want to delete all records")
+        if st.button("Delete all records", disabled=not confirm):
+            delete_all_patients()
+            st.session_state.flash = "All records deleted."
+            st.rerun()
+else:
+    st.info("No patients registered yet. Use the form above.")
+
+
+# ---------------------------------------------------------------
+# Disease analytics
+# ---------------------------------------------------------------
+
+st.divider()
+st.header("Disease analytics")
+
+diagnosed = [p for p in patients if p["Disease / Diagnosis"]]
+
+if diagnosed:
+    disease_df = pd.DataFrame(
+        Counter(p["Disease / Diagnosis"] for p in diagnosed).most_common(),
+        columns=["Disease", "Patients"],
+    )
+    status_df = pd.DataFrame(
+        Counter(p["Diagnosis Status"] for p in diagnosed).items(),
+        columns=["Diagnosis status", "Patients"],
+    )
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Most recorded diagnoses")
+        st.bar_chart(disease_df.set_index("Disease"), color="#2F7D6D", horizontal=True)
+    with right:
+        st.subheader("Diagnosis status")
+        st.bar_chart(
+            status_df.set_index("Diagnosis status"), color="#6B8FA3", horizontal=True
+        )
+elif patients:
+    st.info("Disease charts will appear once patients have a diagnosis recorded.")
+else:
+    st.info("Register some fictional test patients to see disease analytics.")
+
+
+# ---------------------------------------------------------------
+# Registrations over time
+# ---------------------------------------------------------------
+
+st.divider()
+st.header("Registrations over time")
+
+if patients:
+    activity_df = pd.DataFrame(
+        sorted(Counter(p["Registered At"][:10] for p in patients).items()),
+        columns=["Date", "Registrations"],
+    )
+    activity_df["Date"] = pd.to_datetime(activity_df["Date"])
+    st.line_chart(activity_df.set_index("Date"), color="#2F7D6D")
+else:
+    st.info("Registration activity will show here once patients are added.")
+
+
+st.divider()
+st.caption("Healthcare Intelligence System · student prototype · fictional data only")
