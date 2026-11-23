@@ -445,7 +445,7 @@ with st.form("patient_form", clear_on_submit=True):
         ],
     )
 
-    submitted = st.form_submit_button("Register patient", use_container_width=True)
+    submitted = st.form_submit_button("Register patient", width="stretch")
 
 if submitted:
     if not full_name.strip():
@@ -517,7 +517,7 @@ st.header("Patient records")
 
 if patients:
     patient_df = pd.DataFrame(patients)
-    st.dataframe(patient_df, use_container_width=True, hide_index=True)
+    st.dataframe(patient_df, width="stretch", hide_index=True)
     st.download_button(
         "Download records (CSV)",
         patient_df.to_csv(index=False).encode("utf-8"),
