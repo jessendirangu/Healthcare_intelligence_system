@@ -9,6 +9,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
+import diabetes_risk
 import health_education
 from themes import THEMES, theme_css
 
@@ -213,7 +214,9 @@ st.set_page_config(
     layout="wide",
 )
 
-page = st.sidebar.radio("Menu", ["Patient dashboard", "Health education"])
+page = st.sidebar.radio(
+    "Menu", ["Patient dashboard", "Health education", "Diabetes risk (AI)"]
+)
 
 st.sidebar.divider()
 theme_name = st.sidebar.selectbox("Theme", list(THEMES), key="theme")
@@ -320,6 +323,11 @@ patients = load_patients()
 if page == "Health education":
     st.divider()
     health_education.render(patients, search_who, who_definition)
+    st.stop()
+
+if page == "Diabetes risk (AI)":
+    st.divider()
+    diabetes_risk.render()
     st.stop()
 
 
