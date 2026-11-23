@@ -93,7 +93,7 @@ def password_problem(password):
 # Storage
 # ---------------------------------------------------------------
 
-def _use_supabase():
+def use_supabase():
     try:
         return "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets
     except Exception:
@@ -101,7 +101,7 @@ def _use_supabase():
 
 
 @st.cache_resource
-def _supabase():
+def supabase_client():
     from supabase import create_client
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
@@ -126,8 +126,8 @@ def find_user(column, value):
     """Look up one user by email or phone. Returns a dict or None."""
     if column not in ("email", "phone"):
         raise ValueError("Can only search by email or phone")
-    if _use_supabase():
-        rows = _supabase().table("users").select("*").eq(column, value).limit(1).execute().data
+    if use_supabase():
+        rows = supabase_client().table("users").select("*").eq(column, value).limit(1).execute().data
         return rows[0] if rows else None
     with _local() as conn:
         row = conn.execute(f"SELECT * FROM users WHERE {column} = ?", (value,)).fetchone()
@@ -137,8 +137,8 @@ def find_user(column, value):
 def list_users():
     """All accounts for the admin page. Password hashes are never returned."""
     columns = "full_name, email, phone, country, created_at"
-    if _use_supabase():
-        return _supabase().table("users").select(columns).order("created_at").execute().data
+    if use_supabase():
+        return supabase_client().table("users").select(columns).order("created_at").execute().data
     with _local() as conn:
         return [dict(r) for r in conn.execute(f"SELECT {columns} FROM users ORDER BY created_at")]
 
@@ -156,8 +156,8 @@ def is_admin():
 
 
 def create_user(user):
-    if _use_supabase():
-        _supabase().table("users").insert(user).execute()
+    if use_supabase():
+        supabase_client().table("users").insert(user).execute()
     else:
         with _local() as conn:
             conn.execute(
