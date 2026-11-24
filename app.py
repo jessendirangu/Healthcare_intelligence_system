@@ -11,7 +11,10 @@ import risk_pages
 from storage import delete_my_patients, load_patients, next_patient_id, save_patient
 import auth
 import health_education
+import i18n
 import intro
+import tracker
+from i18n import t
 from themes import THEMES, theme_css
 
 
@@ -216,14 +219,19 @@ st.set_page_config(
 )
 
 page = st.sidebar.radio(
-    "Menu",
-    ["Patient dashboard", "Health education", "Diabetes risk (AI)", "Heart disease risk (AI)"],
+    t("menu"),
+    ["page_tracker", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
+    format_func=t,
 )
 
 st.sidebar.divider()
-theme_name = st.sidebar.selectbox("Theme", list(THEMES), key="theme")
+i18n.language_picker(st.sidebar, key="lang_sidebar")
+theme_name = st.sidebar.selectbox(t("theme"), list(THEMES), key="theme")
 theme = THEMES[theme_name]
 st.markdown(theme_css(theme), unsafe_allow_html=True)
+
+# Someone clicked "Verify my email" in their sign-up email
+auth.handle_verification_link()
 
 # Welcome screen, shown once per visit until the visitor clicks "Enter"
 if not st.session_state.get("entered"):
@@ -236,7 +244,7 @@ if not st.session_state.get("entered"):
 # ---------------------------------------------------------------
 
 NAIROBI = timezone(timedelta(hours=3))
-today = datetime.now(NAIROBI).strftime("%A, %d %B %Y")
+today = i18n.long_date(datetime.now(NAIROBI))
 
 st.sidebar.markdown("### 🏥 Healthcare Intelligence")
 
@@ -254,7 +262,7 @@ st.html(f"""
       <div style="font-size:22px; font-weight:700; color:{theme['text']};">
         Healthcare Intelligence System</div>
       <div style="font-size:14px; color:{theme['muted']};">
-        Patient records, clinical analytics and health education</div>
+        {t("tagline")}</div>
     </div>
   </div>
   <div style="font-size:13px; color:{theme['muted']}; text-align:right;">
@@ -273,8 +281,7 @@ def footer():
       <div>Data: WHO ICD-11 · MedlinePlus · UCI · NIDDK</div>
     </div>
     <div style="font-family:sans-serif; font-size:12px; color:{theme['muted']}; margin-top:6px;">
-      For education and demonstration only. Use fictional patient data.
-      Not a substitute for professional medical advice.
+      {t("footer_disclaimer")}
     </div>
     """)
 
@@ -298,19 +305,29 @@ patients = load_patients(owner=current_email)
 # Navigation
 # ---------------------------------------------------------------
 
-if page == "Health education":
+if page == "page_tracker":
+    st.divider()
+    tracker.render(current_email)
+    footer()
+    st.stop()
+
+# The remaining pages are not translated yet
+if i18n.lang() == "sw":
+    st.info(t("english_only"))
+
+if page == "page_education":
     st.divider()
     health_education.render(patients, search_who, who_definition)
     footer()
     st.stop()
 
-if page == "Diabetes risk (AI)":
+if page == "page_diabetes":
     st.divider()
     risk_pages.render_diabetes()
     footer()
     st.stop()
 
-if page == "Heart disease risk (AI)":
+if page == "page_heart":
     st.divider()
     risk_pages.render_heart()
     footer()

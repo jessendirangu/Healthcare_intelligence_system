@@ -13,7 +13,8 @@ import pandas as pd
 import streamlit as st
 
 import auth
-from storage import load_patients
+from storage import load_patients, load_readings
+from tracker import bp_category, readings_frame
 
 st.set_page_config(page_title="HIS Admin", page_icon="📊", layout="wide")
 
@@ -109,8 +110,8 @@ if not filtered.empty:
     top = filtered.loc[filtered["Disease / Diagnosis"] != "Not recorded", "Disease / Diagnosis"]
     k5.metric("Most common diagnosis", top.mode().iloc[0] if not top.empty else "–")
 
-tab_overview, tab_disease, tab_vitals, tab_users, tab_data = st.tabs(
-    ["Overview", "Diseases", "Vital signs", "Users", "Data"]
+tab_overview, tab_disease, tab_vitals, tab_bp, tab_users, tab_data = st.tabs(
+    ["Overview", "Diseases", "Vital signs", "Home BP tracking", "Users", "Data"]
 )
 
 
@@ -224,6 +225,69 @@ with tab_vitals:
             summary = summary.rename(columns={"count": "Recorded", "mean": "Average",
                                               "min": "Lowest", "max": "Highest"})
             st.dataframe(summary[["Recorded", "Average", "Lowest", "Highest"]].round(1), width="stretch")
+
+
+# ---------------------------------------------------------------
+# Home blood pressure tracking (from "My health tracker")
+# ---------------------------------------------------------------
+
+BP_LABELS = {
+    "bp_low": "Low", "bp_normal": "Normal", "bp_high_normal": "High-normal",
+    "bp_grade1": "Grade 1 (140-159/90-99)", "bp_grade2": "Grade 2 (160+/100+)",
+    "bp_very_high": "Very high (180+/110+)",
+}
+
+with tab_bp:
+    try:
+        readings = readings_frame(load_readings())
+    except Exception:
+        readings = pd.DataFrame()
+        st.error("Couldn't load readings. Has the 'readings' table been created in Supabase?")
+
+    bp = readings.dropna(subset=["systolic", "diastolic"]) if not readings.empty else readings
+    if bp.empty:
+        st.info("No blood pressure readings yet. They appear when users use My health tracker.")
+    else:
+        recent = bp[bp["taken_at"] >= pd.Timestamp.now(tz=bp["taken_at"].dt.tz) - pd.Timedelta(days=30)]
+        # One row per user: their average over the last 30 days (3+ readings needed)
+        per_user = recent.groupby("owner").agg(
+            readings=("systolic", "size"), systolic=("systolic", "mean"), diastolic=("diastolic", "mean"))
+        per_user = per_user[per_user["readings"] >= 3].round(0)
+        per_user["category"] = [BP_LABELS[bp_category(s, d)]
+                                for s, d in zip(per_user["systolic"], per_user["diastolic"])]
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Users tracking BP", bp["owner"].nunique())
+        k2.metric("BP readings", len(bp))
+        k3.metric("Users with 30-day average", len(per_user))
+        high = per_user["category"].str.startswith(("Grade", "Very")).mean() if len(per_user) else 0
+        k4.metric("Average in hypertension range", f"{high:.0%}",
+                  help="Share of users whose 30-day average is 140/90 or above.")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Users by 30-day average BP")
+            if len(per_user):
+                order = [v for v in BP_LABELS.values() if v in set(per_user["category"])]
+                st.bar_chart(per_user["category"].value_counts().reindex(order).rename("Users"),
+                             color=ACCENT, horizontal=True)
+            else:
+                st.info("Needs users with 3+ readings in the last 30 days.")
+        with c2:
+            st.subheader("Readings per week")
+            st.line_chart(bp.set_index("taken_at").resample("W")["systolic"].count()
+                          .rename("Readings"), color=ACCENT)
+
+        st.subheader("Anonymised readings for research")
+        st.caption("Emails are replaced with codes (U001, U002...) and notes are removed, "
+                   "so this file can be analysed without identifying anyone.")
+        codes = {email: f"U{i:03d}" for i, email in enumerate(sorted(readings["owner"].unique()), 1)}
+        anon = readings.drop(columns=["id", "note"]).assign(owner=readings["owner"].map(codes))
+        anon = anon.rename(columns={"owner": "user_code"})
+        st.dataframe(anon.tail(200), width="stretch", hide_index=True)
+        st.download_button("Download anonymised readings (CSV)",
+                           anon.to_csv(index=False).encode("utf-8"),
+                           file_name="his_bp_readings_anonymised.csv", mime="text/csv")
 
 
 # ---------------------------------------------------------------

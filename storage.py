@@ -131,3 +131,77 @@ def next_patient_id():
                    key=lambda pid: int(pid.split("-")[1]))
     number = int(last.split("-")[1]) + 1 if last else 1
     return f"HIS-{number:05d}"
+
+
+# ---------------------------------------------------------------
+# Personal health readings (My health tracker)
+# Table "readings": one row per measurement, always tied to its owner.
+# ---------------------------------------------------------------
+
+READING_FIELDS = [
+    "taken_at", "systolic", "diastolic", "pulse",
+    "weight_kg", "glucose_mmol", "glucose_type", "note",
+]
+
+
+def _local_readings(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            taken_at TEXT NOT NULL,
+            systolic INTEGER, diastolic INTEGER, pulse INTEGER,
+            weight_kg REAL, glucose_mmol REAL, glucose_type TEXT, note TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+    return conn
+
+
+def load_readings(owner=None):
+    """One user's readings (oldest first), or everyone's if owner is None (admin only)."""
+    columns = "id, owner, " + ", ".join(READING_FIELDS)
+    if use_supabase():
+        rows, start = [], 0
+        while True:
+            query = supabase_client().table("readings").select(columns)
+            if owner is not None:
+                query = query.eq("owner", owner)
+            page = query.order("taken_at").range(start, start + PAGE_SIZE - 1).execute().data
+            rows.extend(page)
+            if len(page) < PAGE_SIZE:
+                return rows
+            start += PAGE_SIZE
+    with sqlite3.connect(DB_PATH) as conn:
+        _local_readings(conn).row_factory = sqlite3.Row
+        if owner is None:
+            found = conn.execute(f"SELECT {columns} FROM readings ORDER BY taken_at")
+        else:
+            found = conn.execute(
+                f"SELECT {columns} FROM readings WHERE owner = ? ORDER BY taken_at", (owner,)
+            )
+        return [dict(r) for r in found]
+
+
+def save_reading(reading):
+    """reading: dict with "owner" plus the READING_FIELDS."""
+    row = {k: reading.get(k) for k in ["owner"] + READING_FIELDS}
+    if use_supabase():
+        supabase_client().table("readings").insert(row).execute()
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        _local_readings(conn).execute(
+            f"INSERT INTO readings ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
+            list(row.values()),
+        )
+
+
+def delete_reading(owner, reading_id):
+    """Delete one reading. The owner check means nobody can delete someone else's."""
+    if use_supabase():
+        (supabase_client().table("readings").delete()
+         .eq("id", reading_id).eq("owner", owner).execute())
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        _local_readings(conn).execute(
+            "DELETE FROM readings WHERE id = ? AND owner = ?", (reading_id, owner)
+        )
