@@ -7,6 +7,7 @@ import pycountry
 import requests
 import streamlit as st
 
+import risk_check
 import risk_pages
 from storage import delete_my_patients, load_patients, next_patient_id, save_patient
 import auth
@@ -220,7 +221,7 @@ st.set_page_config(
 
 page = st.sidebar.radio(
     t("menu"),
-    ["page_tracker", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
+    ["page_tracker", "page_risk", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
     format_func=t,
 )
 
@@ -309,6 +310,12 @@ patients = load_patients(owner=current_email)
 if page == "page_tracker":
     st.divider()
     tracker.render(current_email)
+    footer()
+    st.stop()
+
+if page == "page_risk":
+    st.divider()
+    risk_check.render()
     footer()
     st.stop()
 
