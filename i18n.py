@@ -125,6 +125,11 @@ TEXT = {
         "sw": "Barua pepe yako imethibitishwa na akaunti yako iko tayari. Ingia hapa chini.",
     },
 
+    "db_unavailable": {
+        "en": "We couldn't connect to the server just now. Please wait a moment and try again.",
+        "sw": "Imeshindikana kuunganisha na seva kwa sasa. Tafadhali subiri kidogo kisha ujaribu tena.",
+    },
+
     # Email verification link (sign-up)
     "link_email_subject": {
         "en": "Verify your email for Healthcare Intelligence System",

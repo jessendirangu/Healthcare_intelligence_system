@@ -149,12 +149,30 @@ def _local():
     return conn
 
 
+class DatabaseUnavailable(Exception):
+    """The online database could not be reached (temporary network or server issue)."""
+
+
+def _with_retry(action, tries=3):
+    """Run a Supabase request, retrying brief network hiccups before giving up."""
+    for attempt in range(tries):
+        try:
+            return action()
+        except Exception as error:
+            # Log the reason (never the keys) so it shows in Manage app > logs
+            print(f"[DATABASE] Attempt {attempt + 1} failed: {error!r}", flush=True)
+            if attempt == tries - 1:
+                raise DatabaseUnavailable() from error
+            time.sleep(1.5 * (attempt + 1))
+
+
 def find_user(column, value):
     """Look up one user by email or phone. Returns a dict or None."""
     if column not in ("email", "phone"):
         raise ValueError("Can only search by email or phone")
     if use_supabase():
-        rows = supabase_client().table("users").select("*").eq(column, value).limit(1).execute().data
+        rows = _with_retry(lambda: supabase_client().table("users").select("*")
+                           .eq(column, value).limit(1).execute().data)
         return rows[0] if rows else None
     with _local() as conn:
         row = conn.execute(f"SELECT * FROM users WHERE {column} = ?", (value,)).fetchone()
@@ -491,7 +509,11 @@ def sign_in_form():
 
     if submitted:
         email, phone = clean_email(login), clean_phone(login)
-        user = find_user("email", email) if email else find_user("phone", phone) if phone else None
+        try:
+            user = find_user("email", email) if email else find_user("phone", phone) if phone else None
+        except DatabaseUnavailable:
+            st.error(t("db_unavailable"))
+            return
         if user and check_password(password, user["password_hash"]):
             st.session_state.failed_logins = 0
             st.session_state.pop("prefill_login", None)
@@ -560,6 +582,11 @@ def _sign_up():
     if not consent:
         problems.append(t("err_consent"))
     if not problems:
+        try:
+            find_user("email", clean_mail)
+        except DatabaseUnavailable:
+            st.error(t("db_unavailable"))
+            return
         if find_user("email", clean_mail):
             problems.append(t("err_email_taken"))
         elif find_user("phone", clean_tel):
