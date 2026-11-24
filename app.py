@@ -243,8 +243,9 @@ if not st.session_state.get("entered"):
 # Header and footer
 # ---------------------------------------------------------------
 
-NAIROBI = timezone(timedelta(hours=3))
-today = i18n.long_date(datetime.now(NAIROBI))
+# Date, time and place in the visitor's own time zone (from their browser)
+now = i18n.local_now()
+today = f"{i18n.long_date(now)} · {now:%H:%M}"
 
 st.sidebar.markdown("### 🏥 Healthcare Intelligence")
 
@@ -266,7 +267,7 @@ st.html(f"""
     </div>
   </div>
   <div style="font-size:13px; color:{theme['muted']}; text-align:right;">
-    {today}<br>Nairobi, Kenya
+    {today}<br>{i18n.place_label()}
   </div>
 </div>
 """)
@@ -277,7 +278,7 @@ def footer():
     st.html(f"""
     <div style="font-family:sans-serif; font-size:13px; color:{theme['muted']};
                 display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-      <div>© {datetime.now(NAIROBI).year} Jesse Kigo Ndirangu · Healthcare Intelligence System</div>
+      <div>© {i18n.local_now().year} Jesse Kigo Ndirangu · Healthcare Intelligence System</div>
       <div>Data: WHO ICD-11 · MedlinePlus · UCI · NIDDK</div>
     </div>
     <div style="font-family:sans-serif; font-size:12px; color:{theme['muted']}; margin-top:6px;">
@@ -526,7 +527,7 @@ if submitted:
             "Nationality": nationality.strip(),
             "Race": race,
             "Religion": religion,
-            "Registered At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Registered At": i18n.local_now().strftime("%Y-%m-%d %H:%M:%S"),
         })
         # st.rerun() wipes anything shown on this run, so save the
         # message and show it after the page reloads.

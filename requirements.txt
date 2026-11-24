@@ -5,3 +5,4 @@ pycountry
 scikit-learn
 supabase
 phonenumbers
+tzdata

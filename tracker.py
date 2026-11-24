@@ -14,7 +14,7 @@ The page gives general guidance only. It never diagnoses: a high average is
 a reason to see a health worker, who confirms hypertension or diabetes.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import altair as alt
 import pandas as pd
@@ -24,7 +24,6 @@ import i18n
 from i18n import t
 from storage import delete_reading, load_readings, save_reading
 
-NAIROBI = timezone(timedelta(hours=3))
 HIGH_SYS, HIGH_DIA = 140, 90
 
 i18n.register({
@@ -305,7 +304,7 @@ def readings_frame(rows):
     df = pd.DataFrame(rows)
     if df.empty:
         return df
-    df["taken_at"] = pd.to_datetime(df["taken_at"], utc=True, format="ISO8601").dt.tz_convert(NAIROBI)
+    df["taken_at"] = pd.to_datetime(df["taken_at"], utc=True, format="ISO8601").dt.tz_convert(i18n.user_tz())
     for col in ["systolic", "diastolic", "pulse", "weight_kg", "glucose_mmol"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     return df.sort_values("taken_at").reset_index(drop=True)
@@ -390,7 +389,7 @@ def history_table(df):
 # ---------------------------------------------------------------
 
 def _entry_form(owner):
-    now = datetime.now(NAIROBI)
+    now = i18n.local_now()
     st.subheader(t("tr_add"))
     with st.form("reading_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
@@ -414,7 +413,7 @@ def _entry_form(owner):
     if not submitted:
         return
 
-    taken_at = datetime.combine(day, clock, tzinfo=NAIROBI)
+    taken_at = datetime.combine(day, clock, tzinfo=i18n.user_tz())
     problems = []
     if all(v is None for v in (systolic, diastolic, pulse, weight, sugar)):
         problems.append(t("tr_err_empty"))
@@ -481,7 +480,7 @@ def _trends(df):
     periods = {"tr_7": 7, "tr_30": 30, "tr_90": 90, "tr_all": None}
     choice = st.segmented_control(t("tr_period"), list(periods), default="tr_30",
                                   format_func=t, key="tracker_period") or "tr_30"
-    now = datetime.now(NAIROBI)
+    now = i18n.local_now()
     days = periods[choice]
     shown = df if days is None else df[df["taken_at"] >= now - timedelta(days=days)]
 

@@ -5,6 +5,9 @@ fetched with t("key"). The chosen language is kept in st.session_state.lang.
 Other files can add their own text with register({...}).
 """
 
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 import streamlit as st
 
 LANGUAGES = {"en": "English", "sw": "Kiswahili"}
@@ -277,3 +280,39 @@ def language_picker(where=st, key="lang_picker"):
         on_change=_changed,
         args=(key,),
     )
+
+
+# ---------------------------------------------------------------
+# Visitor's local time
+# The browser tells Streamlit its time zone (e.g. "Europe/London").
+# No GPS or permission is needed, and no location is stored.
+# ---------------------------------------------------------------
+
+DEFAULT_TZ = "Africa/Nairobi"
+
+
+def user_tz_name():
+    try:
+        return st.context.timezone or DEFAULT_TZ
+    except Exception:
+        return DEFAULT_TZ
+
+
+def user_tz():
+    for name in (user_tz_name(), DEFAULT_TZ):
+        try:
+            return ZoneInfo(name)
+        except Exception:
+            continue
+    return timezone(timedelta(hours=3))  # last resort: Nairobi offset
+
+
+def local_now():
+    return datetime.now(user_tz())
+
+
+def place_label():
+    """e.g. 'London · GMT' or 'Nairobi · EAT', taken from the time zone name."""
+    name = getattr(user_tz(), "key", DEFAULT_TZ)  # the zone actually used
+    city = name.split("/")[-1].replace("_", " ")
+    return f"{city} · {local_now().tzname()}"
