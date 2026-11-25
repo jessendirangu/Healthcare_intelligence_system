@@ -18,6 +18,7 @@ TEXT = {
     "theme": {"en": "Theme", "sw": "Mandhari"},
     "language": {"en": "🌐 Language / Lugha", "sw": "🌐 Lugha / Language"},
     "page_tracker": {"en": "My health tracker", "sw": "Kifuatilia afya yangu"},
+    "page_danger": {"en": "Danger signs", "sw": "Dalili za hatari"},
     "page_risk": {"en": "Am I at risk?", "sw": "Je, niko hatarini?"},
     "page_dashboard": {"en": "Patient dashboard", "sw": "Dashibodi ya wagonjwa"},
     "page_education": {"en": "Health education", "sw": "Elimu ya afya"},

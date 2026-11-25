@@ -17,6 +17,7 @@ the result is a guide for who should get tested, not a diagnosis.
 
 import streamlit as st
 
+import demo
 import i18n
 from i18n import t
 
@@ -322,6 +323,7 @@ def render():
         waist = st.number_input(t("rk_waist"), 40, 200, value=None, help=t("rk_waist_help"),
                                 key="rk_waist_in")
     with st.expander(t("rk_how_waist")):
+        demo.show("waist")
         st.markdown(t("rk_how_waist_body"))
 
     bmi = None

@@ -20,6 +20,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+import demo
 import i18n
 from i18n import t
 from storage import delete_reading, load_readings, save_reading
@@ -564,6 +565,7 @@ def render(owner):
     _entry_form(owner)
 
     with st.expander(t("tr_howto")):
+        demo.show("bp")
         st.markdown(t("tr_howto_body"))
 
     st.divider()
