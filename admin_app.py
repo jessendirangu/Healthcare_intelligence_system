@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 import auth
+import chp_store
 from storage import load_patients, load_readings
 from tracker import bp_category, readings_frame
 
@@ -110,8 +111,8 @@ if not filtered.empty:
     top = filtered.loc[filtered["Disease / Diagnosis"] != "Not recorded", "Disease / Diagnosis"]
     k5.metric("Most common diagnosis", top.mode().iloc[0] if not top.empty else "–")
 
-tab_overview, tab_disease, tab_vitals, tab_bp, tab_users, tab_data = st.tabs(
-    ["Overview", "Diseases", "Vital signs", "Home BP tracking", "Users", "Data"]
+tab_overview, tab_disease, tab_vitals, tab_bp, tab_chp, tab_users, tab_data = st.tabs(
+    ["Overview", "Diseases", "Vital signs", "Home BP tracking", "CHPs", "Users", "Data"]
 )
 
 
@@ -288,6 +289,62 @@ with tab_bp:
         st.download_button("Download anonymised readings (CSV)",
                            anon.to_csv(index=False).encode("utf-8"),
                            file_name="his_bp_readings_anonymised.csv", mime="text/csv")
+
+
+# ---------------------------------------------------------------
+# CHPs: approve access, see their work and linkage to care
+# ---------------------------------------------------------------
+
+with tab_chp:
+    try:
+        requests_df = pd.DataFrame(chp_store.list_chp_requests())
+        hh_all = pd.DataFrame(chp_store.all_households())
+        mem_all = pd.DataFrame(chp_store.all_members())
+        ref_all = pd.DataFrame(chp_store.referrals())
+    except Exception:
+        requests_df = hh_all = mem_all = ref_all = pd.DataFrame()
+        st.error("Couldn't load CHP data. Have the CHP tables been created in Supabase?")
+
+    st.subheader("Access requests")
+    waiting = requests_df[requests_df["status"] == "pending"] if not requests_df.empty else requests_df
+    if waiting.empty:
+        st.info("No requests waiting.")
+    else:
+        st.dataframe(waiting[["email", "facility", "area", "requested_at"]], width="stretch", hide_index=True)
+        who = st.selectbox("Request", waiting["email"].tolist())
+        a1, a2 = st.columns(2)
+        if a1.button("✅ Approve", width="stretch"):
+            chp_store.decide_chp(who, True)
+            st.rerun()
+        if a2.button("❌ Reject", width="stretch"):
+            chp_store.decide_chp(who, False)
+            st.rerun()
+
+    approved = requests_df[requests_df["status"] == "approved"] if not requests_df.empty else requests_df
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Approved CHPs", len(approved))
+    k2.metric("Households", len(hh_all))
+    k3.metric("People registered", len(mem_all))
+    decided = ref_all[ref_all["status"] != "pending"] if not ref_all.empty else ref_all
+    k4.metric("Referrals that reached care", f"{(decided['status'] == 'attended').mean():.0%}"
+              if len(decided) else "–",
+              help="Linkage to care: of referrals with a known outcome, the share where the person "
+                   "went to the facility.")
+
+    if not approved.empty:
+        st.subheader("Work by CHP")
+        per = approved[["email", "facility", "area"]].copy()
+        per["Households"] = per["email"].map(hh_all.groupby("chp").size() if not hh_all.empty else {}).fillna(0).astype(int)
+        per["People"] = per["email"].map(mem_all.groupby("chp").size() if not mem_all.empty else {}).fillna(0).astype(int)
+        per["Referrals"] = per["email"].map(ref_all.groupby("chp").size() if not ref_all.empty else {}).fillna(0).astype(int)
+        per["Pending"] = per["email"].map(ref_all[ref_all["status"] == "pending"].groupby("chp").size()
+                                          if not ref_all.empty else {}).fillna(0).astype(int)
+        st.dataframe(per, width="stretch", hide_index=True)
+
+    if not ref_all.empty:
+        st.subheader("Referrals by reason and outcome")
+        st.dataframe(pd.crosstab(ref_all["reason"], ref_all["status"], margins=True, margins_name="Total"),
+                     width="stretch")
 
 
 # ---------------------------------------------------------------

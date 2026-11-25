@@ -205,3 +205,28 @@ def delete_reading(owner, reading_id):
         _local_readings(conn).execute(
             "DELETE FROM readings WHERE id = ? AND owner = ?", (reading_id, owner)
         )
+
+
+def load_readings_many(owners):
+    """Readings for several owners at once (e.g. all members a CHP looks after)."""
+    owners = list(owners)
+    if not owners:
+        return []
+    columns = "id, owner, " + ", ".join(READING_FIELDS)
+    if use_supabase():
+        rows = []
+        for i in range(0, len(owners), 100):  # keep each request a sensible size
+            chunk, start = owners[i:i + 100], 0
+            while True:
+                page = (supabase_client().table("readings").select(columns).in_("owner", chunk)
+                        .order("taken_at").range(start, start + PAGE_SIZE - 1).execute().data)
+                rows.extend(page)
+                if len(page) < PAGE_SIZE:
+                    break
+                start += PAGE_SIZE
+        return rows
+    with sqlite3.connect(DB_PATH) as conn:
+        _local_readings(conn).row_factory = sqlite3.Row
+        marks = ", ".join("?" * len(owners))
+        return [dict(r) for r in conn.execute(
+            f"SELECT {columns} FROM readings WHERE owner IN ({marks}) ORDER BY taken_at", owners)]

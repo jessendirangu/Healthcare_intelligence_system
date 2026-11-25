@@ -12,9 +12,12 @@ import risk_check
 import risk_pages
 from storage import delete_my_patients, load_patients, next_patient_id, save_patient
 import auth
+import chp
+import habits
 import health_education
 import i18n
 import intro
+import measure
 import tracker
 from i18n import t
 from themes import THEMES, theme_css
@@ -222,7 +225,7 @@ st.set_page_config(
 
 page = st.sidebar.radio(
     t("menu"),
-    ["page_tracker", "page_danger", "page_risk", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
+    ["page_tracker", "page_danger", "page_measure", "page_risk", "page_habits", "page_chp", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
     format_func=t,
 )
 
@@ -317,6 +320,24 @@ if page == "page_tracker":
 if page == "page_danger":
     st.divider()
     danger_signs.render()
+    footer()
+    st.stop()
+
+if page == "page_measure":
+    st.divider()
+    measure.render(current_email)
+    footer()
+    st.stop()
+
+if page == "page_chp":
+    st.divider()
+    chp.render(current_email)
+    footer()
+    st.stop()
+
+if page == "page_habits":
+    st.divider()
+    habits.render(current_email)
     footer()
     st.stop()
 

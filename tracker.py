@@ -544,10 +544,12 @@ def _history(df, owner):
             st.rerun()
 
 
-def render(owner):
-    st.header(t("tr_title"))
-    st.write(t("tr_intro"))
-    st.caption(t("tr_why"))
+def render(owner, show_header=True):
+    """The full tracker for one owner: a signed-in user, or a household member ("member:<id>")."""
+    if show_header:
+        st.header(t("tr_title"))
+        st.write(t("tr_intro"))
+        st.caption(t("tr_why"))
 
     if "tracker_flash" in st.session_state:
         st.success(st.session_state.pop("tracker_flash"))

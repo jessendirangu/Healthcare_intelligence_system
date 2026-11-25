@@ -108,6 +108,65 @@ def _clock():
     <circle cx="160" cy="110" r="6" fill="#3B4A47"/>"""
 
 
+def _wrist():
+    """Forearm, palm up, with two fingers on the thumb side of the wrist; a pulse ripples."""
+    return f"""<rect x="20" y="95" width="230" height="56" rx="28" fill="#F2D2B6" stroke="#3B4A47" stroke-width="3"/>
+    <ellipse cx="262" cy="123" rx="40" ry="34" fill="#F2D2B6" stroke="#3B4A47" stroke-width="3"/>
+    <text x="268" y="92" font-size="13" fill="#5B6B67" text-anchor="middle">👍</text>
+    <rect x="190" y="70" width="18" height="52" rx="9" fill="#E8BFA0" stroke="#3B4A47" stroke-width="2"/>
+    <rect x="212" y="68" width="18" height="54" rx="9" fill="#E8BFA0" stroke="#3B4A47" stroke-width="2"/>
+    <circle cx="210" cy="108" r="6" fill="{RED}">
+      <animate attributeName="r" values="5;14;5" dur="0.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.9;0.2;0.9" dur="0.8s" repeatCount="indefinite"/>
+    </circle>"""
+
+
+def _upper_arm(tape=False, colour=ACCENT):
+    arm = """<rect x="135" y="20" width="50" height="180" rx="25" fill="#F2D2B6" stroke="#3B4A47" stroke-width="3"/>
+    <circle cx="160" cy="22" r="8" fill="#3B4A47"/><circle cx="160" cy="198" r="8" fill="#3B4A47"/>
+    <line x1="200" y1="22" x2="200" y2="198" stroke="#9BA8A5" stroke-width="2" stroke-dasharray="5 4"/>
+    <circle cx="200" cy="110" r="5" fill="#C27C2C"/>"""
+    if tape:
+        arm += f"""<rect x="128" y="102" width="64" height="16" rx="4" fill="{colour}" stroke="#3B4A47" stroke-width="2">
+          <animate attributeName="width" from="0" to="64" dur="1.5s" fill="freeze"/></rect>"""
+    return arm
+
+
+def _muac_tape():
+    return """<rect x="20" y="95" width="94" height="40" fill="#C0392B"/>
+    <rect x="114" y="95" width="40" height="40" fill="#F1C40F"/>
+    <rect x="154" y="95" width="146" height="40" fill="#27AE60"/>
+    <text x="67" y="160" font-size="13" text-anchor="middle" fill="#1F2D2B">&lt; 11.5</text>
+    <text x="134" y="160" font-size="13" text-anchor="middle" fill="#1F2D2B">11.5-12.4</text>
+    <text x="227" y="160" font-size="13" text-anchor="middle" fill="#1F2D2B">12.5+</text>"""
+
+
+def _feet():
+    return """<ellipse cx="115" cy="130" rx="38" ry="62" fill="#F2D2B6" stroke="#3B4A47" stroke-width="3"/>
+    <ellipse cx="205" cy="130" rx="38" ry="62" fill="#F2D2B6" stroke="#3B4A47" stroke-width="3"/>
+    <circle cx="115" cy="110" r="8" fill="#D9A98A"><animate attributeName="r" values="0;9;9" dur="3s" fill="freeze"/></circle>
+    <circle cx="205" cy="110" r="8" fill="#D9A98A"><animate attributeName="r" values="0;9;9" dur="3s" fill="freeze"/></circle>
+    <text x="160" y="40" font-size="30" text-anchor="middle">👍👍</text>"""
+
+
+def _plate():
+    return """<circle cx="160" cy="112" r="92" fill="#fff" stroke="#3B4A47" stroke-width="4"/>
+    <path d="M160 112 L160 20 A92 92 0 0 0 160 204 Z" fill="#7BB661"/>
+    <path d="M160 112 L160 20 A92 92 0 0 1 252 112 Z" fill="#E8C468"/>
+    <path d="M160 112 L252 112 A92 92 0 0 1 160 204 Z" fill="#C97B5A"/>
+    <text x="110" y="118" font-size="30" text-anchor="middle">🥬</text>
+    <text x="200" y="80" font-size="26" text-anchor="middle">🌽</text>
+    <text x="200" y="160" font-size="26" text-anchor="middle">🫘</text>"""
+
+
+def _salt_spoon():
+    return """<ellipse cx="160" cy="120" rx="70" ry="30" fill="#E9EFED" stroke="#3B4A47" stroke-width="3"/>
+    <rect x="225" y="112" width="80" height="14" rx="7" fill="#9BA8A5"/>
+    <ellipse cx="160" cy="114" rx="50" ry="16" fill="#fff" stroke="#C9D6D2" stroke-width="2">
+      <animate attributeName="ry" values="2;16" dur="2s" fill="freeze"/></ellipse>
+    <text x="160" y="190" font-size="20" text-anchor="middle" fill="#1F2D2B">&lt; 5 g</text>"""
+
+
 # ---------------------------------------------------------------
 # The demonstrations: (scene, English text, Kiswahili text)
 # ---------------------------------------------------------------
@@ -224,6 +283,80 @@ DEMOS = {
              "baby warm, skin to skin.",
              "Watoto wachanga huugua sana kwa haraka. Dalili yoyote: nenda hospitali sasa, ukimweka "
              "mtoto kwenye joto, ngozi kwa ngozi."),
+        ],
+    },
+    "pulse": {
+        "title": ("How to check your pulse", "Jinsi ya kupima mapigo ya moyo"),
+        "steps": [
+            (_icon("🪑"), "Sit quietly and rest for 5 minutes first.",
+             "Kaa kimya na upumzike kwa dakika 5 kwanza."),
+            (_wrist(), "Turn your hand palm up. Place two fingers, your index and middle finger, on the "
+             "thumb side of your wrist, just below the base of the thumb.",
+             "Geuza kiganja juu. Weka vidole viwili, cha shahada na cha kati, upande wa kidole gumba "
+             "wa kifundo cha mkono, chini kidogo ya kidole gumba."),
+            (_wrist(), "Press gently until you feel a beat. Do not use your thumb, because it has its own pulse.",
+             "Bonyeza taratibu hadi uhisi mapigo. Usitumie kidole gumba, kwa sababu kina mapigo yake."),
+            (_clock(), "Tap Start and count the beats for 30 seconds. The app doubles it for you.",
+             "Bonyeza Anza na uhesabu mapigo kwa sekunde 30. Programu itazidisha mara mbili kwa ajili yako."),
+            (_icon("❤️"), "A normal resting pulse for adults is 60 to 100 beats a minute. Notice if the beat "
+             "feels irregular.",
+             "Mapigo ya kawaida ya mtu mzima akiwa amepumzika ni 60 hadi 100 kwa dakika. Angalia kama "
+             "mapigo hayako sawa."),
+        ],
+    },
+    "muac": {
+        "title": ("Checking a child's arm for malnutrition (MUAC)", "Kupima mkono wa mtoto kwa utapiamlo (MUAC)"),
+        "steps": [
+            (_icon("👶"), "This check is for children aged 6 months to 5 years. Use the left arm, hanging "
+             "relaxed by the side.",
+             "Kipimo hiki ni kwa watoto wa miezi 6 hadi miaka 5. Tumia mkono wa kushoto, ukining'inia "
+             "kwa utulivu ubavuni."),
+            (_upper_arm(), "Find the middle of the upper arm, halfway between the tip of the shoulder and "
+             "the tip of the elbow. Mark it.",
+             "Tafuta katikati ya mkono wa juu, nusu kati ya ncha ya bega na ncha ya kiwiko. Weka alama."),
+            (_upper_arm(tape=True), "Wrap the MUAC tape or a string around the arm at that point. Not too "
+             "tight, not too loose.",
+             "Zungusha tepu ya MUAC au kamba kuzunguka mkono hapo. Isibane sana, isilegee sana."),
+            (_muac_tape(), "Red, below 11.5 centimetres: severe malnutrition, go to a health facility now. "
+             "Yellow, 11.5 to 12.4: moderate, visit the clinic soon. Green, 12.5 or more: good.",
+             "Nyekundu, chini ya sentimita 11.5: utapiamlo mkali, nenda kituo cha afya sasa. Njano, "
+             "11.5 hadi 12.4: wa wastani, nenda kliniki hivi karibuni. Kijani, 12.5 au zaidi: vizuri."),
+            (_feet(), "Also press your thumbs on the top of both feet for 3 seconds. If a dent stays on "
+             "both feet, this is severe malnutrition. Go to a health facility now.",
+             "Pia bonyeza vidole gumba juu ya nyayo zote mbili kwa sekunde 3. Kama shimo linabaki "
+             "kwenye nyayo zote mbili, huu ni utapiamlo mkali. Nenda kituo cha afya sasa."),
+        ],
+    },
+    "plate": {
+        "title": ("The healthy plate", "Sahani ya afya"),
+        "steps": [
+            (_plate(), "Fill half your plate with vegetables, like sukuma, managu, terere, cabbage or tomatoes.",
+             "Jaza nusu ya sahani yako mboga, kama sukuma, managu, terere, kabichi au nyanya."),
+            (_plate(), "A quarter with starch, like ugali, preferably from whole maize, sweet potatoes, nduma or brown rice.",
+             "Robo ya sahani chakula cha wanga, kama ugali, hasa wa mahindi yasiyokobolewa, viazi vitamu, nduma au wali wa kahawia."),
+            (_plate(), "A quarter with protein, like beans, ndengu, githeri, fish, eggs or chicken.",
+             "Robo ya sahani protini, kama maharagwe, ndengu, githeri, samaki, mayai au kuku."),
+            (_icon("💧"), "Drink water instead of soda, and add fruit like bananas, oranges or pawpaw.",
+             "Kunywa maji badala ya soda, na uongeze matunda kama ndizi, machungwa au papai."),
+        ],
+    },
+    "salt": {
+        "title": ("Cooking with less salt", "Kupika kwa chumvi kidogo"),
+        "steps": [
+            (_salt_spoon(), "Adults should eat less than 5 grams of salt a day. That is just under one teaspoon, "
+             "for all the food you eat in a day.",
+             "Watu wazima wanapaswa kula chini ya gramu 5 za chumvi kwa siku. Hiyo ni chini kidogo ya "
+             "kijiko kimoja cha chai, kwa chakula chote cha siku nzima."),
+            (_icon("🧂"), "Remove the salt container from the table, and taste food before adding any salt.",
+             "Ondoa chombo cha chumvi mezani, na uonje chakula kabla ya kuongeza chumvi."),
+            (_icon("🧅"), "Use onion, tomato, garlic, ginger, dhania and lemon to give food flavour instead of salt.",
+             "Tumia kitunguu, nyanya, kitunguu saumu, tangawizi, dhania na ndimu kuongeza ladha badala ya chumvi."),
+            (_icon("📦"), "Limit stock cubes, seasoning powders, crisps, sausages, smokies and salted fish. They "
+             "hide a lot of salt.",
+             "Punguza vidonge vya supu, unga wa viungo, crisps, soseji, smokies na samaki waliokaushwa kwa "
+             "chumvi. Vina chumvi nyingi iliyojificha."),
+            (_icon("👅"), "Reduce salt slowly. In two or three weeks your taste adjusts, and food tastes good again.",
+             "Punguza chumvi polepole. Baada ya wiki mbili au tatu ulimi huzoea, na chakula kinakuwa kitamu tena."),
         ],
     },
 }
@@ -419,3 +552,53 @@ UI_WATCH = ("▶ Watch the demonstration", "▶ Tazama maonyesho")
 
 def watch_label():
     return _pick(UI_WATCH)
+
+
+# ---------------------------------------------------------------
+# A simple countdown timer with a beep and vibration at the end
+# ---------------------------------------------------------------
+
+_TIMER_UI = {
+    "start": ("▶ Start {s} seconds", "▶ Anza sekunde {s}"),
+    "counting": ("Count now...", "Hesabu sasa..."),
+    "done": ("Time's up! Enter your count below.", "Muda umekwisha! Andika hesabu yako hapa chini."),
+    "again": ("↺ Start again", "↺ Anza tena"),
+}
+
+
+def timer(seconds):
+    ui = {k: _pick(v).replace("{s}", str(seconds)) for k, v in _TIMER_UI.items()}
+    html = (_TIMER.replace("__UI__", json.dumps(ui)).replace("__SECONDS__", str(seconds)))
+    components.html(html, height=170)
+
+
+_TIMER = """
+<div style="font-family:sans-serif;border:1px solid #DCE5E2;border-radius:14px;background:#fff;
+     padding:12px;max-width:560px;margin:auto;text-align:center">
+  <div id="clock" style="font-size:44px;font-weight:800;color:#1F2D2B">__SECONDS__</div>
+  <div id="msg" style="color:#5B6B67;min-height:20px;margin-bottom:6px"></div>
+  <button id="go" style="width:100%;background:#2F7D6D;color:#fff;border:0;border-radius:8px;padding:12px;font-size:16px"></button>
+</div>
+<script>
+const U = __UI__, TOTAL = __SECONDS__;
+const $ = id => document.getElementById(id);
+let left = TOTAL, tick = null;
+$("go").textContent = U.start;
+function beep() {
+  try {
+    const a = new (window.AudioContext || window.webkitAudioContext)();
+    const o = a.createOscillator(); o.frequency.value = 880; o.connect(a.destination);
+    o.start(); setTimeout(() => { o.stop(); a.close(); }, 600);
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+}
+$("go").onclick = () => {
+  clearInterval(tick); left = TOTAL; $("clock").textContent = left;
+  $("msg").textContent = U.counting; $("go").textContent = U.again;
+  tick = setInterval(() => {
+    left--; $("clock").textContent = left;
+    if (left <= 0) { clearInterval(tick); $("msg").textContent = U.done; beep(); }
+  }, 1000);
+};
+</script>
+"""
