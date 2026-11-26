@@ -16,6 +16,45 @@ As a nurse, I met many patients whose first sign was a stroke, heart failure or 
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/welcome.png" width="400"><br><b>Welcome page</b></td>
+    <td align="center"><img src="screenshots/sign_in.png" width="400"><br><b>Sign in</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/home.png" width="400"><br><b>Home screen</b></td>
+    <td align="center"><img src="screenshots/home_sw.png" width="400"><br><b>Home screen in Kiswahili</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/danger_signs.png" width="400"><br><b>Danger signs</b></td>
+    <td align="center"><img src="screenshots/risk_check.png" width="400"><br><b>Am I at risk? (FINDRISC)</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/measure.png" width="400"><br><b>Measure with your hands</b></td>
+    <td align="center"><img src="screenshots/tracker.png" width="400"><br><b>My health tracker</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/habits.png" width="400"><br><b>Healthy habits</b></td>
+    <td align="center"><img src="screenshots/reminders.png" width="400"><br><b>Calendar reminders</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/education.png" width="400"><br><b>Health education</b></td>
+    <td align="center"><img src="screenshots/ai_risk.png" width="400"><br><b>AI heart disease risk</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/chp.png" width="400"><br><b>CHP mode</b></td>
+    <td align="center"><img src="screenshots/privacy.png" width="400"><br><b>Privacy notice (Data Protection Act 2019)</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/delete_account.png" width="400"><br><b>Delete my account</b></td>
+    <td align="center"><img src="screenshots/create_account.png" width="400"><br><b>Create account</b></td>
+  </tr>
+</table>
+
+---
+
 ## What it does
 
 The app opens on a simple **home screen of 9 icons**, with an emergency button at the top.
