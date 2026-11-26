@@ -44,6 +44,9 @@ if not auth.is_admin():
 
 st.sidebar.markdown("### 📊 HIS Admin")
 auth.sidebar_account()
+auth.touch()
+auth.idle_watch()
+auth.cookie_writer()
 
 
 # ---------------------------------------------------------------

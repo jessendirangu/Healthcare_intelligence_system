@@ -32,6 +32,7 @@ from email.message import EmailMessage
 import phonenumbers
 import pycountry
 import streamlit as st
+import streamlit.components.v1 as components
 
 import i18n
 from i18n import t
@@ -43,6 +44,9 @@ OTP_MAX_TRIES = 5     # wrong codes allowed before starting again
 RESEND_WAIT = 60      # seconds before a new code can be requested
 MAX_SENDS = 5         # codes per attempt, so codes can't be guessed endlessly
 LINK_HOURS = 24       # how long a sign-up verification link stays valid
+DEVICE_DAYS = 30      # a remembered device skips the email code for this long
+DEVICE_COOKIE = "his_device"
+IDLE_MINUTES = 5      # sign out after this long without any activity
 COUNTRIES = sorted(c.name for c in pycountry.countries)
 
 
@@ -144,6 +148,14 @@ def _local():
             token_hash TEXT PRIMARY KEY,
             email TEXT NOT NULL,
             payload TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trusted_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            created_at TEXT,
             expires_at TEXT NOT NULL
         )""")
     return conn
@@ -440,7 +452,11 @@ def _verification_screen():
         st.info(t("otp_test_mode"))
 
     with st.form("otp_form"):
-        code = st.text_input(t("otp_label"), max_chars=6, placeholder="123456")
+        code = st.text_input(t("otp_label"), max_chars=6, placeholder="123456",
+                             autocomplete="one-time-code")
+        if otp["purpose"] == "sign_in":
+            st.checkbox(t("remember_device", days=DEVICE_DAYS), key="otp_remember",
+                        help=t("remember_help"))
         verify = st.form_submit_button(t("otp_verify"), type="primary", width="stretch")
 
     left, right = st.columns(2)
@@ -477,6 +493,123 @@ def _pending(purpose):
 
 
 # ---------------------------------------------------------------
+# Remembered devices: after one email code, a device can skip the
+# code for 30 days. The device keeps a random token in a cookie;
+# the database keeps only its hash, linked to the account.
+# ---------------------------------------------------------------
+
+def _device_token():
+    try:
+        return st.context.cookies.get(DEVICE_COOKIE)
+    except Exception:
+        return None
+
+
+def device_trusted(email):
+    token = _device_token()
+    if not token:
+        return False
+    token_hash = _code_hash(token)
+    try:
+        if use_supabase():
+            rows = _with_retry(lambda: supabase_client().table("trusted_devices").select("expires_at")
+                               .eq("owner", email).eq("token_hash", token_hash).execute().data)
+        else:
+            with _local() as conn:
+                rows = [dict(r) for r in conn.execute(
+                    "SELECT expires_at FROM trusted_devices WHERE owner = ? AND token_hash = ?",
+                    (email, token_hash))]
+    except Exception:
+        return False  # if in doubt, ask for the email code
+    now = datetime.now(timezone.utc)
+    return any(datetime.fromisoformat(str(r["expires_at"]).replace("Z", "+00:00")) > now for r in rows)
+
+
+def remember_device(email):
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    row = {"owner": email, "token_hash": _code_hash(token), "created_at": now.isoformat(),
+           "expires_at": (now + timedelta(days=DEVICE_DAYS)).isoformat()}
+    try:
+        if use_supabase():
+            _with_retry(lambda: supabase_client().table("trusted_devices").insert(row).execute())
+        else:
+            with _local() as conn:
+                conn.execute("INSERT INTO trusted_devices (owner, token_hash, created_at, expires_at) "
+                             "VALUES (?, ?, ?, ?)", list(row.values()))
+    except Exception:
+        return
+    st.session_state.set_device_cookie = token  # written to the browser on the next page run
+
+
+def forget_device(email):
+    token = _device_token()
+    if token:
+        token_hash = _code_hash(token)
+        try:
+            if use_supabase():
+                _with_retry(lambda: supabase_client().table("trusted_devices").delete()
+                            .eq("owner", email).eq("token_hash", token_hash).execute())
+            else:
+                with _local() as conn:
+                    conn.execute("DELETE FROM trusted_devices WHERE owner = ? AND token_hash = ?",
+                                 (email, token_hash))
+        except Exception:
+            pass
+    st.session_state.clear_device_cookie = True
+
+
+def cookie_writer():
+    """Write or remove the device cookie in the browser. Call once per page run."""
+    token = st.session_state.pop("set_device_cookie", None)
+    if token:
+        components.html(
+            f"<script>document.cookie = '{DEVICE_COOKIE}={token}; max-age={DEVICE_DAYS * 86400}; "
+            f"path=/; SameSite=Lax; Secure';</script>", height=0)
+    if st.session_state.pop("clear_device_cookie", False):
+        components.html(f"<script>document.cookie = '{DEVICE_COOKIE}=; max-age=0; path=/; "
+                        f"SameSite=Lax; Secure';</script>", height=0)
+
+
+# ---------------------------------------------------------------
+# Signing out, including automatically after inactivity
+# ---------------------------------------------------------------
+
+def idle_limit_seconds():
+    try:
+        return int(st.secrets.get("IDLE_MINUTES", IDLE_MINUTES)) * 60
+    except Exception:
+        return IDLE_MINUTES * 60
+
+
+def touch():
+    """Record activity. Called on every page run caused by the user."""
+    st.session_state.last_active = time.time()
+
+
+def sign_out(message_key=None):
+    for key in ("user", "otp", "last_active"):
+        st.session_state.pop(key, None)
+    if message_key:
+        st.session_state.auth_flash = t(message_key, minutes=idle_limit_seconds() // 60)
+
+
+@st.fragment(run_every=15)
+def idle_watch():
+    """Checks every 15 seconds. Warns 1 minute before the limit, then signs out."""
+    if not st.session_state.get("user"):
+        return
+    idle = time.time() - st.session_state.get("last_active", time.time())
+    limit = idle_limit_seconds()
+    if idle >= limit:
+        sign_out("idle_signed_out")
+        st.rerun(scope="app")
+    elif idle >= limit - 60:
+        st.warning(t("idle_warning", s=max(int(limit - idle), 0)))
+        st.button(t("idle_stay"), on_click=touch, key="idle_stay", type="primary")
+
+
+# ---------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------
 
@@ -485,7 +618,10 @@ def sign_in_form():
     if _pending("sign_in"):
         user = _verification_screen()
         if user:
+            if st.session_state.pop("otp_remember", False):
+                remember_device(user["email"])
             st.session_state.user = user
+            touch()
             st.rerun()
         return
 
@@ -503,8 +639,9 @@ def sign_in_form():
             value=st.session_state.get("prefill_login", ""),
             placeholder="you@example.com / +254712345678",
             help=t("login_help"),
+            autocomplete="username",
         )
-        password = st.text_input(t("password"), type="password")
+        password = st.text_input(t("password"), type="password", autocomplete="current-password")
         submitted = st.form_submit_button(t("sign_in"), type="primary", width="stretch")
 
     if submitted:
@@ -517,8 +654,13 @@ def sign_in_form():
         if user and check_password(password, user["password_hash"]):
             st.session_state.failed_logins = 0
             st.session_state.pop("prefill_login", None)
-            start_verification("sign_in", user["email"],
-                               {"name": user["full_name"], "email": user["email"]})
+            details = {"name": user["full_name"], "email": user["email"]}
+            if device_trusted(user["email"]):
+                # This device was remembered after an earlier email code
+                st.session_state.user = details
+                touch()
+                st.rerun()
+            start_verification("sign_in", user["email"], details)
         else:
             # Same message either way, so nobody can check which emails exist
             st.session_state.failed_logins = attempts + 1
@@ -556,8 +698,9 @@ def _sign_up():
         phone = c4.text_input(t("phone"), placeholder=t("phone_ph"))
         country = st.selectbox(t("country_residence"), COUNTRIES, index=COUNTRIES.index("Kenya"))
         c7, c8 = st.columns(2)
-        password = c7.text_input(t("password_star"), type="password", help=t("password_help"))
-        confirm = c8.text_input(t("confirm_password"), type="password")
+        password = c7.text_input(t("password_star"), type="password", help=t("password_help"),
+                                  autocomplete="new-password")
+        confirm = c8.text_input(t("confirm_password"), type="password", autocomplete="new-password")
         consent = st.checkbox(t("consent"))
         submitted = st.form_submit_button(t("create_account"), type="primary", width="stretch")
 
@@ -648,5 +791,9 @@ def sidebar_account():
         role = " (admin)" if is_admin() else ""
         st.sidebar.caption(t("signed_in_as", name=user["name"]) + role)
         if st.sidebar.button(t("sign_out"), width="stretch"):
-            st.session_state.pop("user")
+            sign_out()
+            st.rerun()
+        if device_trusted(user["email"]) and st.sidebar.button(t("forget_device"), width="stretch",
+                                                               help=t("forget_help")):
+            forget_device(user["email"])
             st.rerun()

@@ -133,6 +133,27 @@ TEXT = {
         "sw": "Barua pepe yako imethibitishwa na akaunti yako iko tayari. Ingia hapa chini.",
     },
 
+    "remember_device": {"en": "Remember this device for {days} days", "sw": "Kumbuka kifaa hiki kwa siku {days}"},
+    "remember_help": {
+        "en": "You won't need an email code on this device. Don't tick this on a shared or public phone.",
+        "sw": "Hutahitaji namba ya barua pepe kwenye kifaa hiki. Usiweke alama kwenye simu ya pamoja au ya umma.",
+    },
+    "forget_device": {"en": "Forget this device", "sw": "Sahau kifaa hiki"},
+    "forget_help": {
+        "en": "The next sign-in on this device will need an email code again.",
+        "sw": "Kuingia tena kwenye kifaa hiki kutahitaji namba ya barua pepe.",
+    },
+    "idle_warning": {
+        "en": "⏳ You've been inactive. For your privacy you'll be signed out in about {s} seconds.",
+        "sw": "⏳ Hujatumia kwa muda. Kwa faragha yako utatolewa baada ya takriban sekunde {s}.",
+    },
+    "idle_stay": {"en": "Stay signed in", "sw": "Endelea kuwa ndani"},
+    "idle_signed_out": {
+        "en": "You were signed out after {minutes} minutes without activity, to protect your health "
+              "information. Please sign in again.",
+        "sw": "Ulitolewa baada ya dakika {minutes} bila kutumia, ili kulinda taarifa zako za afya. "
+              "Tafadhali ingia tena.",
+    },
     "db_unavailable": {
         "en": "We couldn't connect to the server just now. Please wait a moment and try again.",
         "sw": "Imeshindikana kuunganisha na seva kwa sasa. Tafadhali subiri kidogo kisha ujaribu tena.",

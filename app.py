@@ -299,6 +299,9 @@ if not auth.require_login():
     footer()
     st.stop()
 auth.sidebar_account()
+auth.touch()          # any page run caused by the user counts as activity
+auth.idle_watch()     # signs out after 5 minutes without activity
+auth.cookie_writer()  # saves "remember this device" in the browser when asked
 
 
 # ---------------------------------------------------------------
