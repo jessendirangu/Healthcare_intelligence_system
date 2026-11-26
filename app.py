@@ -15,6 +15,7 @@ import auth
 import chp
 import habits
 import health_education
+import home
 import i18n
 import intro
 import measure
@@ -223,11 +224,12 @@ st.set_page_config(
     layout="wide",
 )
 
-page = st.sidebar.radio(
-    t("menu"),
-    ["page_tracker", "page_danger", "page_measure", "page_risk", "page_habits", "page_chp", "page_dashboard", "page_education", "page_diabetes", "page_heart"],
-    format_func=t,
-)
+# Navigation: a Home screen with step-by-step tiles (see home.py),
+# plus a Home button and a "go to" list in the sidebar.
+home.sidebar()
+page = home.current()
+if page != "home" and page not in home.PAGES and page not in ("page_diabetes", "page_heart"):
+    page = "home"
 
 st.sidebar.divider()
 i18n.language_picker(st.sidebar, key="lang_sidebar")
@@ -311,6 +313,14 @@ patients = load_patients(owner=current_email)
 # Navigation
 # ---------------------------------------------------------------
 
+if page == "home":
+    st.divider()
+    home.render(theme, st.session_state.user.get("name", ""))
+    footer()
+    st.stop()
+
+home.back_bar(page)
+
 if page == "page_tracker":
     st.divider()
     tracker.render(current_email)
@@ -354,6 +364,17 @@ if i18n.lang() == "sw":
 if page == "page_education":
     st.divider()
     health_education.render(patients, search_who, who_definition)
+    footer()
+    st.stop()
+
+if page == "page_ai":
+    st.divider()
+    which = st.segmented_control(t("ai_pick"), ["page_diabetes", "page_heart"],
+                                 default="page_diabetes", format_func=t, key="ai_which") or "page_diabetes"
+    if which == "page_diabetes":
+        risk_pages.render_diabetes()
+    else:
+        risk_pages.render_heart()
     footer()
     st.stop()
 
