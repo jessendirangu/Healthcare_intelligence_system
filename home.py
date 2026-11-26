@@ -21,6 +21,7 @@ PAGES = {
     "page_tracker": ("🩺", 3), "page_habits": ("🔥", 3),
     "page_ai": ("🤖", 4),
     "page_chp": ("🏘️", 5), "page_dashboard": ("📋", 5),
+    "page_account": ("👤", 0),
 }
 
 i18n.register({

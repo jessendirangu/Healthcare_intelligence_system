@@ -1,5 +1,5 @@
 .streamlit/secrets.toml
 patients.db
-__pycache__/
 users.db
 chp.db
+__pycache__/

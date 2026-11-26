@@ -377,17 +377,26 @@ def _pick(pair):
     return pair[1] if i18n.lang() == "sw" else pair[0]
 
 
-def show(name, height=440):
-    """Show a narrated demonstration in the user's chosen language."""
-    demo = DEMOS[name]
-    steps = [{"svg": svg, "text": _pick((en, sw))} for svg, en, sw in demo["steps"]]
+def _play(title, steps, height=440):
     data = {
-        "title": _pick(demo["title"]),
+        "title": title,
         "steps": steps,
         "lang": "sw" if i18n.lang() == "sw" else "en",
         "ui": {k: _pick(v) for k, v in UI.items()},
     }
     components.html(_PLAYER.replace("__DATA__", json.dumps(data)), height=height)
+
+
+def show(name, height=440):
+    """Show a narrated demonstration in the user's chosen language."""
+    demo = DEMOS[name]
+    _play(_pick(demo["title"]), [{"svg": svg, "text": _pick((en, sw))} for svg, en, sw in demo["steps"]], height)
+
+
+def read_aloud(title, sections, height=440):
+    """Read text aloud section by section. sections: list of (emoji, text, is_warning)."""
+    _play(title, [{"svg": _icon(icon, RED if warning else ACCENT), "text": text}
+                  for icon, text, warning in sections], height)
 
 
 _PLAYER = """

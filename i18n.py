@@ -95,10 +95,12 @@ TEXT = {
     },
     "confirm_password": {"en": "Confirm password *", "sw": "Thibitisha nenosiri *"},
     "consent": {
-        "en": "I agree that my name, email, phone number and the health readings I enter "
-              "are stored to give me an account, in line with Kenya's Data Protection Act 2019. *",
-        "sw": "Ninakubali jina langu, barua pepe, nambari ya simu na vipimo vya afya ninavyoweka "
-              "vihifadhiwe ili nipate akaunti, kulingana na Sheria ya Ulinzi wa Data ya Kenya 2019. *",
+        "en": "I have read the privacy notice and agree that my name, email, phone number and the health "
+              "information I enter are stored, including on servers outside Kenya, to provide this service, "
+              "in line with Kenya's Data Protection Act 2019. *",
+        "sw": "Nimesoma taarifa ya faragha na ninakubali jina langu, barua pepe, nambari ya simu na taarifa "
+              "za afya ninazoweka zihifadhiwe, ikiwa ni pamoja na kwenye seva nje ya Kenya, ili kutoa huduma "
+              "hii, kulingana na Sheria ya Ulinzi wa Data ya Kenya 2019. *",
     },
     "err_first": {"en": "First name is required.", "sw": "Jina la kwanza linahitajika."},
     "err_last": {"en": "Last name is required.", "sw": "Jina la mwisho linahitajika."},

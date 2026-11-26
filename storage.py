@@ -230,3 +230,12 @@ def load_readings_many(owners):
         marks = ", ".join("?" * len(owners))
         return [dict(r) for r in conn.execute(
             f"SELECT {columns} FROM readings WHERE owner IN ({marks}) ORDER BY taken_at", owners)]
+
+
+def delete_readings(owner):
+    """Delete every reading for one owner (an email, or "member:<id>")."""
+    if use_supabase():
+        supabase_client().table("readings").delete().eq("owner", owner).execute()
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        _local_readings(conn).execute("DELETE FROM readings WHERE owner = ?", (owner,))

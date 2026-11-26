@@ -114,8 +114,8 @@ if not filtered.empty:
     top = filtered.loc[filtered["Disease / Diagnosis"] != "Not recorded", "Disease / Diagnosis"]
     k5.metric("Most common diagnosis", top.mode().iloc[0] if not top.empty else "–")
 
-tab_overview, tab_disease, tab_vitals, tab_bp, tab_chp, tab_users, tab_data = st.tabs(
-    ["Overview", "Diseases", "Vital signs", "Home BP tracking", "CHPs", "Users", "Data"]
+tab_overview, tab_disease, tab_vitals, tab_bp, tab_chp, tab_feedback, tab_users, tab_data = st.tabs(
+    ["Overview", "Diseases", "Vital signs", "Home BP tracking", "CHPs", "Feedback", "Users", "Data"]
 )
 
 
@@ -348,6 +348,39 @@ with tab_chp:
         st.subheader("Referrals by reason and outcome")
         st.dataframe(pd.crosstab(ref_all["reason"], ref_all["status"], margins=True, margins_name="Total"),
                      width="stretch")
+
+
+# ---------------------------------------------------------------
+# Feedback: "Was this page helpful?" (anonymous)
+# ---------------------------------------------------------------
+
+with tab_feedback:
+    try:
+        fb = pd.DataFrame(chp_store.all_feedback())
+    except Exception:
+        fb = pd.DataFrame()
+        st.error("Couldn't load feedback. Has the 'feedback' table been created in Supabase?")
+    if fb.empty:
+        st.info("No feedback yet. It appears when users answer 'Was this page helpful?'.")
+    else:
+        fb["helpful"] = fb["helpful"].astype(int)
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Responses", len(fb))
+        f2.metric("Found it helpful", f"{fb['helpful'].mean():.0%}")
+        f3.metric("With comments", int(fb["comment"].fillna("").str.len().gt(0).sum()))
+
+        st.subheader("By page")
+        by_page = fb.groupby("page").agg(responses=("helpful", "size"), helpful=("helpful", "mean"))
+        by_page["helpful"] = (by_page["helpful"] * 100).round(0).astype(int).astype(str) + "%"
+        st.dataframe(by_page.sort_values("responses", ascending=False), width="stretch")
+
+        st.subheader("Comments (newest first)")
+        comments = fb[fb["comment"].fillna("").str.len() > 0].iloc[::-1]
+        comments = comments.assign(rating=comments["helpful"].map({1: "👍", 0: "👎"}))
+        st.dataframe(comments[["created_at", "page", "rating", "lang", "comment"]],
+                     width="stretch", hide_index=True)
+        st.download_button("Download feedback (CSV)", fb.to_csv(index=False).encode("utf-8"),
+                           file_name="his_feedback.csv", mime="text/csv")
 
 
 # ---------------------------------------------------------------

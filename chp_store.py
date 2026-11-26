@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS members (
 CREATE TABLE IF NOT EXISTS habit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, day TEXT NOT NULL,
     habits TEXT, created_at TEXT, UNIQUE (owner, day));
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, page TEXT NOT NULL, helpful INTEGER NOT NULL,
+    comment TEXT, lang TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS referrals (
     id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, chp TEXT NOT NULL,
     reason TEXT NOT NULL, note TEXT, referred_at TEXT NOT NULL,
@@ -92,6 +95,30 @@ def _update(table, values, **filters):
     with _local() as conn:
         conn.execute(f"UPDATE {table} SET {sets} WHERE {where}",
                      list(values.values()) + list(filters.values()))
+
+
+def _delete(table, **filters):
+    if use_supabase():
+        def run():
+            query = supabase_client().table(table).delete()
+            for column, value in filters.items():
+                query = query.eq(column, value)
+            return query.execute()
+        return _with_retry(run)
+    where = " AND ".join(f"{c} = ?" for c in filters)
+    with _local() as conn:
+        conn.execute(f"DELETE FROM {table} WHERE {where}", list(filters.values()))
+
+
+def delete_everything_for(email):
+    """Remove all CHP and habit data owned by this account. Returns the member ids removed."""
+    member_ids = [m["id"] for m in _select("members", chp=email)]
+    _delete("referrals", chp=email)
+    _delete("members", chp=email)
+    _delete("households", chp=email)
+    _delete("chp_roles", email=email)
+    _delete("habit_logs", owner=email)
+    return member_ids
 
 
 # ---------------------------------------------------------------
@@ -190,3 +217,16 @@ def save_habits(owner, day, habits):
         _update("habit_logs", {"habits": value}, owner=owner, day=day)
     else:
         _insert("habit_logs", {"owner": owner, "day": day, "habits": value, "created_at": _now()})
+
+
+# ---------------------------------------------------------------
+# Anonymous feedback ("Was this page helpful?")
+# ---------------------------------------------------------------
+
+def save_feedback(page, helpful, comment, lang):
+    _insert("feedback", {"page": page, "helpful": int(helpful), "comment": comment or None,
+                         "lang": lang, "created_at": _now()})
+
+
+def all_feedback():
+    return _select("feedback", order="created_at")

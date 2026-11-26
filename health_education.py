@@ -12,6 +12,11 @@ import xml.etree.ElementTree as ET
 import requests
 import streamlit as st
 
+import demo
+import i18n
+from health_education_sw import DISEASES_SW
+from i18n import t
+
 MEDLINEPLUS_URL = "https://wsearch.nlm.nih.gov/ws/query"
 
 DISEASES = {
@@ -308,6 +313,42 @@ DISEASES = {
 }
 
 
+i18n.register({
+    "he_title": {"en": "Health education", "sw": "Elimu ya afya"},
+    "he_caption": {
+        "en": "General information for learning and health promotion. It does not replace advice from a "
+              "qualified health worker. Medicine doses follow national guidelines and a clinician's prescription.",
+        "sw": "Taarifa za jumla kwa kujifunza na kukuza afya. Hazichukui nafasi ya ushauri wa mhudumu wa afya "
+              "aliyehitimu. Dozi za dawa hufuata miongozo ya kitaifa na maagizo ya mhudumu wa afya.",
+    },
+    "he_mode_guides": {"en": "📘 Guides: common conditions in Kenya", "sw": "📘 Miongozo: magonjwa ya kawaida Kenya"},
+    "he_mode_search": {"en": "🔎 Search any disease", "sw": "🔎 Tafuta ugonjwa wowote"},
+    "he_choose": {"en": "Choose", "sw": "Chagua"},
+    "he_filter": {"en": "Filter guides", "sw": "Chuja miongozo"},
+    "he_filter_ph": {"en": "e.g. malaria", "sw": "mf. malaria"},
+    "he_none": {"en": "No matching guide. Try 'Search any disease' instead.",
+                "sw": "Hakuna mwongozo unaolingana. Jaribu 'Tafuta ugonjwa wowote'."},
+    "he_condition": {"en": "Choose a condition", "sw": "Chagua ugonjwa"},
+    "he_listen": {"en": "🔊 Listen to this guide", "sw": "🔊 Sikiliza mwongozo huu"},
+    "he_causes": {"en": "Causes", "sw": "Visababishi"},
+    "he_symptoms": {"en": "Symptoms", "sw": "Dalili"},
+    "he_diagnosis": {"en": "Diagnosis", "sw": "Utambuzi"},
+    "he_treatment": {"en": "Treatment", "sw": "Matibabu"},
+    "he_management": {"en": "Management & prevention", "sw": "Udhibiti na kinga"},
+    "he_urgent": {"en": "Seek urgent care if:", "sw": "Tafuta huduma ya haraka ikiwa:"},
+    "he_overview": {"en": "Overview", "sw": "Muhtasari"},
+    "he_read_more": {"en": "Read more: [WHO fact sheet]({link}) (English)",
+                     "sw": "Soma zaidi: [Taarifa ya WHO]({link}) (Kiingereza)"},
+    "he_in_records": {"en": "{n} patient(s) in your records have this diagnosis.",
+                      "sw": "Wagonjwa {n} katika rekodi zako wana utambuzi huu."},
+    "he_search_en_only": {
+        "en": "",
+        "sw": "Taarifa za utafutaji huu zinatoka moja kwa moja kwa WHO na MedlinePlus, na zinapatikana kwa "
+              "Kiingereza pekee. Kwa Kiswahili, tumia **Miongozo** hapo juu.",
+    },
+})
+
+
 def _bullets(items):
     st.markdown("\n".join(f"- {item}" for item in items))
 
@@ -412,19 +453,38 @@ def _search_any_disease(who_search, who_definition):
             st.info("No MedlinePlus topic found. Try a more common name.")
 
 
+def _guide(name):
+    """The guide in the chosen language (falls back to English)."""
+    info = dict(DISEASES[name])
+    if i18n.lang() == "sw" and name in DISEASES_SW:
+        info.update(DISEASES_SW[name])
+    else:
+        info["name"] = name
+    return info
+
+
+SECTIONS = [("causes", "🦠"), ("symptoms", "🤒"), ("diagnosis", "🔬"), ("treatment", "💊"), ("management", "🛡️")]
+
+
 def _detailed_guides(patients):
-    search = st.text_input("Filter guides", placeholder="e.g. malaria").strip().lower()
-    names = [n for n in DISEASES if search in n.lower()] if search else list(DISEASES)
+    search = st.text_input(t("he_filter"), placeholder=t("he_filter_ph")).strip().lower()
+    names = [n for n in DISEASES if not search or search in n.lower() or search in _guide(n)["name"].lower()]
     if not names:
-        st.info("No matching guide. Try 'Search any disease' instead.")
+        st.info(t("he_none"))
         return
 
-    name = st.selectbox("Choose a condition", names)
-    info = DISEASES[name]
+    name = st.selectbox(t("he_condition"), names, format_func=lambda n: _guide(n)["name"])
+    info = _guide(name)
 
-    st.subheader(name)
+    st.subheader(info["name"])
     st.caption(info["category"])
     st.write(info["overview"])
+
+    with st.expander(t("he_listen")):
+        sections = [("📖", info["overview"], False)]
+        sections += [(icon, f"{t('he_' + key)}. " + ". ".join(info[key]) + ".", False) for key, icon in SECTIONS]
+        sections.append(("🚨", f"{t('he_urgent')} {info['urgent']}", True))
+        demo.read_aloud(info["name"], sections)
 
     if patients:
         count = sum(
@@ -432,33 +492,26 @@ def _detailed_guides(patients):
             if name.split(" (")[0].lower() in (p.get("Disease / Diagnosis") or "").lower()
         )
         if count:
-            st.info(f"{count} patient(s) in your records have this diagnosis.")
+            st.info(t("he_in_records", n=count))
 
-    tabs = st.tabs([
-        "Causes", "Symptoms", "Diagnosis", "Treatment", "Management & prevention",
-    ])
-    for tab, key in zip(tabs, ["causes", "symptoms", "diagnosis", "treatment", "management"]):
+    tabs = st.tabs([f"{icon} {t('he_' + key)}" for key, icon in SECTIONS])
+    for tab, (key, _) in zip(tabs, SECTIONS):
         with tab:
             _bullets(info[key])
 
-    st.error(f"**Seek urgent care if:** {info['urgent']}")
-    st.markdown(f"Read more: [WHO fact sheet]({info['link']})")
+    st.error(f"**{t('he_urgent')}** {info['urgent']}")
+    st.markdown(t("he_read_more", link=info["link"]))
 
 
 def render(patients=None, who_search=None, who_definition=None):
-    st.header("Health education")
-    st.caption(
-        "General information for learning and health promotion. It does not "
-        "replace advice from a qualified health worker. Medicine doses follow "
-        "national guidelines and a clinician's prescription."
-    )
+    st.header(t("he_title"))
+    st.caption(t("he_caption"))
 
-    mode = st.radio(
-        "Choose",
-        ["Search any disease", "Detailed guides: common conditions in Kenya"],
-        horizontal=True,
-    )
-    if mode == "Search any disease":
-        _search_any_disease(who_search, who_definition)
-    else:
+    mode = st.radio(t("he_choose"), ["guides", "search"],
+                    format_func=lambda m: t("he_mode_" + m), horizontal=True, key="he_mode")
+    if mode == "guides":
         _detailed_guides(patients)
+    else:
+        if i18n.lang() == "sw":
+            st.info(t("he_search_en_only"))
+        _search_any_disease(who_search, who_definition)

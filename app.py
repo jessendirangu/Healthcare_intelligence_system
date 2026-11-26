@@ -11,9 +11,11 @@ import danger_signs
 import risk_check
 import risk_pages
 from storage import delete_my_patients, load_patients, next_patient_id, save_patient
+import account
 import auth
 import chp
 import habits
+import feedback
 import health_education
 import home
 import i18n
@@ -281,6 +283,9 @@ st.html(f"""
 
 
 def footer():
+    # "Was this page helpful?" on every page once signed in (anonymous)
+    if st.session_state.get("user"):
+        feedback.render(page)
     st.divider()
     st.html(f"""
     <div style="font-family:sans-serif; font-size:13px; color:{theme['muted']};
@@ -294,14 +299,17 @@ def footer():
     """)
 
 
+# Saves or removes "remember this device" in the browser when asked
+auth.cookie_writer()
+
 # Sign-in required to use the app
 if not auth.require_login():
     footer()
     st.stop()
 auth.sidebar_account()
+st.sidebar.button("👤 " + t("page_account"), on_click=home.go, args=("page_account",), width="stretch")
 auth.touch()          # any page run caused by the user counts as activity
 auth.idle_watch()     # signs out after 5 minutes without activity
-auth.cookie_writer()  # saves "remember this device" in the browser when asked
 
 
 # ---------------------------------------------------------------
@@ -323,6 +331,12 @@ if page == "home":
     st.stop()
 
 home.back_bar(page)
+
+if page == "page_account":
+    st.divider()
+    account.render(current_email)
+    footer()
+    st.stop()
 
 if page == "page_tracker":
     st.divider()
@@ -360,15 +374,16 @@ if page == "page_risk":
     footer()
     st.stop()
 
-# The remaining pages are not translated yet
-if i18n.lang() == "sw":
-    st.info(t("english_only"))
-
 if page == "page_education":
     st.divider()
     health_education.render(patients, search_who, who_definition)
     footer()
     st.stop()
+
+# The remaining pages are not translated yet
+if i18n.lang() == "sw":
+    st.info(t("english_only"))
+
 
 if page == "page_ai":
     st.divider()
