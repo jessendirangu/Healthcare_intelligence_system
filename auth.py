@@ -200,16 +200,40 @@ def list_users():
         return [dict(r) for r in conn.execute(f"SELECT {columns} FROM users ORDER BY created_at")]
 
 
+def _admin_emails():
+    try:
+        return [e.strip().lower() for e in st.secrets.get("ADMIN_EMAILS", [])]
+    except Exception:
+        return []
+
+
 def is_admin():
     """Admins are listed in secrets (ADMIN_EMAILS), never chosen on the website."""
     user = st.session_state.get("user")
     if not user:
         return False
+    return user["email"] in _admin_emails()
+
+
+def sign_in_code_needed(email):
+    """Everyone signs in with email (or phone) and password only: the email was
+    already confirmed when the account was created. An email code is only used
+    again to reset a forgotten password.
+    Set SIGNIN_CODE = "true" in secrets to ask for a code at sign-in again."""
     try:
-        admins = [e.strip().lower() for e in st.secrets.get("ADMIN_EMAILS", [])]
+        return str(st.secrets.get("SIGNIN_CODE", "false")).lower() == "true"
     except Exception:
         return False
-    return user["email"] in admins
+
+
+def update_password(email, password_hash):
+    """Save a new password (as a hash) after a reset."""
+    if use_supabase():
+        _with_retry(lambda: supabase_client().table("users")
+                    .update({"password_hash": password_hash}).eq("email", email).execute())
+    else:
+        with _local() as conn:
+            conn.execute("UPDATE users SET password_hash = ? WHERE email = ?", (password_hash, email))
 
 
 def create_user(user):
@@ -270,6 +294,19 @@ def _pending_delete(email):
         return
     with _local() as conn:
         conn.execute("DELETE FROM pending_signups WHERE email = ?", (email,))
+
+
+def delete_user(email):
+    """Remove the account itself and its remembered devices and pending sign-ups."""
+    if use_supabase():
+        client = supabase_client()
+        _with_retry(lambda: client.table("trusted_devices").delete().eq("owner", email).execute())
+        _with_retry(lambda: client.table("users").delete().eq("email", email).execute())
+    else:
+        with _local() as conn:
+            conn.execute("DELETE FROM trusted_devices WHERE owner = ?", (email,))
+            conn.execute("DELETE FROM users WHERE email = ?", (email,))
+    _pending_delete(email)
 
 
 def finish_sign_up(new_user):
@@ -363,7 +400,7 @@ def send_email(to, subject, text, html):
 
 def mask_email(email):
     name, _, domain = email.partition("@")
-    return f"{name[0]}{'*' * max(len(name) - 1, 3)}@{domain}"
+    return f"{name[0]}{'•' * max(len(name) - 1, 3)}@{domain}"  # dots, not *, which would break bold text
 
 
 def _code_hash(code):
@@ -374,6 +411,12 @@ def _send_code(otp):
     """Make a new code for this pending verification and email it."""
     if otp.get("sends", 0) >= MAX_SENDS:
         return False
+    if otp.get("no_account"):
+        # Password reset for an email with no account: behave the same on screen
+        # (so nobody can test which emails exist) but send nothing.
+        otp["sends"] = otp.get("sends", 0) + 1
+        otp.update(hash="-", expires=time.time() + OTP_MINUTES * 60, tries=0, sent_at=time.time())
+        return True
     otp["sends"] = otp.get("sends", 0) + 1
     code = f"{secrets.randbelow(10 ** 6):06d}"
     otp.update(hash=_code_hash(code), expires=time.time() + OTP_MINUTES * 60,
@@ -435,8 +478,9 @@ def _send_code(otp):
 
 
 def start_verification(purpose, email, payload):
-    """purpose: 'sign_up' or 'sign_in'. payload is used once the code is right."""
-    otp = {"purpose": purpose, "email": email, "payload": payload}
+    """purpose: 'sign_up', 'sign_in' or 'reset'. payload is used once the code is right."""
+    otp = {"purpose": purpose, "email": email, "payload": payload,
+           "no_account": purpose == "reset" and payload is None}
     if _send_code(otp):
         st.session_state.otp = otp
         st.rerun()
@@ -631,6 +675,9 @@ def sign_in_form():
     attempts = st.session_state.get("failed_logins", 0)
     if attempts >= MAX_ATTEMPTS:
         st.error(t("too_many_attempts"))
+        if st.button(t("forgot_password"), type="tertiary", key="forgot_locked"):
+            st.session_state.auth_view = "reset"
+            st.rerun()
         return
 
     with st.form("sign_in"):
@@ -644,6 +691,10 @@ def sign_in_form():
         password = st.text_input(t("password"), type="password", autocomplete="current-password")
         submitted = st.form_submit_button(t("sign_in"), type="primary", width="stretch")
 
+    if st.button(t("forgot_password"), type="tertiary"):
+        st.session_state.auth_view = "reset"
+        st.rerun()
+
     if submitted:
         email, phone = clean_email(login), clean_phone(login)
         try:
@@ -655,8 +706,8 @@ def sign_in_form():
             st.session_state.failed_logins = 0
             st.session_state.pop("prefill_login", None)
             details = {"name": user["full_name"], "email": user["email"]}
-            if device_trusted(user["email"]):
-                # This device was remembered after an earlier email code
+            if not sign_in_code_needed(user["email"]) or device_trusted(user["email"]):
+                # Password is enough (or this device was remembered after a code)
                 st.session_state.user = details
                 touch()
                 st.rerun()
@@ -701,6 +752,9 @@ def _sign_up():
         password = c7.text_input(t("password_star"), type="password", help=t("password_help"),
                                   autocomplete="new-password")
         confirm = c8.text_input(t("confirm_password"), type="password", autocomplete="new-password")
+        import account  # imported here to avoid a circular import
+        with st.expander("🔒 " + t("ac_read_privacy")):
+            st.markdown(account.privacy_text())
         consent = st.checkbox(t("consent"))
         submitted = st.form_submit_button(t("create_account"), type="primary", width="stretch")
 
@@ -751,6 +805,93 @@ def _sign_up():
     })
 
 
+i18n.register({
+    "forgot_password": {"en": "Forgot password?", "sw": "Umesahau nenosiri?"},
+    "reset_title": {"en": "Reset your password", "sw": "Weka nenosiri jipya"},
+    "reset_caption": {
+        "en": "Enter the email you used to create your account. We'll send you a 6-digit code.",
+        "sw": "Andika barua pepe uliyotumia kufungua akaunti. Tutakutumia namba ya tarakimu 6.",
+    },
+    "reset_send": {"en": "Send code", "sw": "Tuma namba"},
+    "reset_new_title": {"en": "Choose a new password", "sw": "Chagua nenosiri jipya"},
+    "new_password": {"en": "New password", "sw": "Nenosiri jipya"},
+    "reset_save": {"en": "Save new password", "sw": "Hifadhi nenosiri jipya"},
+    "back_to_sign_in": {"en": "← Back to sign in", "sw": "← Rudi kuingia"},
+    "reset_done": {
+        "en": "Your password has been changed. Sign in with your new password.",
+        "sw": "Nenosiri lako limebadilishwa. Ingia kwa nenosiri jipya.",
+    },
+})
+
+
+def _leave_reset():
+    for key in ("auth_view", "reset_email", "otp"):
+        st.session_state.pop(key, None)
+
+
+def reset_password_form():
+    """Forgotten password: email code, then a new password."""
+    # Step 3: code confirmed, choose a new password
+    email = st.session_state.get("reset_email")
+    if email:
+        st.markdown(f"#### {t('reset_new_title')}")
+        with st.form("new_password"):
+            password = st.text_input(t("new_password"), type="password", help=t("password_help"),
+                                     autocomplete="new-password")
+            confirm = st.text_input(t("confirm_password"), type="password", autocomplete="new-password")
+            save = st.form_submit_button(t("reset_save"), type="primary", width="stretch")
+        if st.button(t("back_to_sign_in"), type="tertiary"):
+            _leave_reset()
+            st.rerun()
+        if save:
+            problem = password_problem(password)
+            if problem:
+                st.error(problem)
+            elif password != confirm:
+                st.error(t("err_pw_match"))
+            else:
+                try:
+                    update_password(email, hash_password(password))
+                except DatabaseUnavailable:
+                    st.error(t("db_unavailable"))
+                    return
+                _leave_reset()
+                st.session_state.failed_logins = 0
+                go_to_sign_in(email, "reset_done")
+                st.rerun()
+        return
+
+    # Step 2: check the emailed code
+    if _pending("reset"):
+        payload = _verification_screen()
+        if payload:
+            st.session_state.reset_email = payload["email"]
+            st.rerun()
+        return
+
+    # Step 1: which account?
+    st.markdown(f"#### {t('reset_title')}")
+    st.caption(t("reset_caption"))
+    with st.form("reset_start"):
+        address = st.text_input(t("email"), value=st.session_state.get("prefill_login", ""),
+                                placeholder="you@example.com", autocomplete="username")
+        send = st.form_submit_button(t("reset_send"), type="primary", width="stretch")
+    if st.button(t("back_to_sign_in"), type="tertiary"):
+        _leave_reset()
+        st.rerun()
+    if send:
+        clean_mail = clean_email(address)
+        if not clean_mail:
+            st.error(t("err_email"))
+            return
+        try:
+            user = find_user("email", clean_mail)
+        except DatabaseUnavailable:
+            st.error(t("db_unavailable"))
+            return
+        start_verification("reset", clean_mail, {"email": user["email"]} if user else None)
+
+
 def require_login():
     """Show the sign-in page until the visitor is signed in."""
     if st.session_state.get("user"):
@@ -767,6 +908,9 @@ def require_login():
         st.caption(t("welcome_caption"))
         # A switch instead of tabs, so the page can move to "Sign in" by itself
         # after an account is created. Hidden while a code is being checked.
+        if st.session_state.get("auth_view") == "reset" or _pending("reset"):
+            reset_password_form()
+            return False
         if _pending("sign_in"):
             mode = "sign_in"
         elif _pending("sign_up"):
